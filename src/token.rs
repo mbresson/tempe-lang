@@ -33,11 +33,12 @@ mod tests {
             (
                 "_awesome_variable",
                 Token::Illegal(Literal("_awesome_variable".to_string())),
-            ), // actually, they cannot start with any non-alphabetic character
+            ), // nor any non-alphabetic character
             (
                 "สนุกไหม",
                 Token::Identifier(Literal("สนุกไหม".to_string())),
             ), // it's 21st century, we can support any Unicode letter in our identifiers
+            ("a(", Token::Illegal(Literal("a(".to_string()))),
         ];
 
         for (s, expected_token) in str_and_expected_tokens {
@@ -78,14 +79,16 @@ pub enum Token {
 }
 
 impl From<&str> for Token {
-    fn from(s: &str) -> Self {
+    fn from(raw_token: &str) -> Self {
         use self::{Literal, Token};
 
-        if s.is_empty() {
+        let raw_token = raw_token.trim();
+
+        if raw_token.is_empty() {
             return Token::Illegal(Literal(String::new()));
         }
 
-        match s.trim() {
+        match raw_token {
             "=" => Token::Assign,
             "+" => Token::Plus,
 
@@ -99,21 +102,28 @@ impl From<&str> for Token {
 
             LITERAL_FUNCTION => Token::Function,
             LITERAL_LET => Token::Let,
-            trimmed_s => {
-                if let Ok(integer) = trimmed_s.parse::<i64>() {
+            _ => {
+                // at this stage, the token is either an identifier or an illegal sequence
+                // identifiers must start with a letter, and may contain only letters, digits and underscores
+
+                if let Ok(integer) = raw_token.parse::<i64>() {
                     // since this is only a toy lexer, our implementation doesn't support integers bigger than i64 can hold
                     // it means that if the source code contains a bigger number, it will fail with Illegal(identifier) and no further explanation
                     return Token::Integer(integer);
                 }
 
-                let mut chars = trimmed_s.chars();
-                let first_char = chars.next().unwrap(); // at this stage the string is guaranteed to contain at least one char
+                let mut chars = raw_token.chars();
 
-                if !first_char.is_alphabetic() {
-                    return Token::Illegal(Literal(trimmed_s.to_string()));
+                let first_char_is_letter = chars.next().unwrap().is_alphabetic(); // at this stage the string is guaranteed to contain at least one char
+
+                let remaining_chars_are_letters_digits_or_underscore =
+                    chars.all(|ch| ch.is_alphanumeric() || ch == '_');
+
+                if first_char_is_letter && remaining_chars_are_letters_digits_or_underscore {
+                    Token::Identifier(Literal(raw_token.to_string()))
+                } else {
+                    Token::Illegal(Literal(raw_token.to_string()))
                 }
-
-                Token::Identifier(Literal(trimmed_s.to_string()))
             }
         }
     }
