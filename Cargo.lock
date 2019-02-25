@@ -1,4 +1,23 @@
 [[package]]
+name = "libc"
+version = "0.2.49"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "tempe-lang"
 version = "0.1.0"
+dependencies = [
+ "users 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
+[[package]]
+name = "users"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "libc 0.2.49 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[metadata]
+"checksum libc 0.2.49 (registry+https://github.com/rust-lang/crates.io-index)" = "413f3dfc802c5dc91dc570b05125b6cda9855edfaa9825c9849807876376e70e"
+"checksum users 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)" = "7fed7d0912567d35f88010c23dbaf865e9da8b5227295e8dc0f2fdd109155ab7"

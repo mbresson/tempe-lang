@@ -5,3 +5,4 @@ authors = ["Matthieu Bresson <matthieu.bresson@outlook.com>"]
 edition = "2018"
 
 [dependencies]
+users = "0.8"
