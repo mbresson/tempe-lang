@@ -120,6 +120,24 @@ impl<'a> Lexer<'a> {
         while let Some(current_char) = self.chars_iterator.next() {
             if current_char.is_digit(number_base) {
                 token_buffer.push(current_char);
+            } else if current_char.is_alphabetic() {
+                token_buffer.push(current_char);
+
+                'read_until_end_of_illegal_sequence: loop {
+                    if let Some(next_char) = self.chars_iterator.next() {
+                        if next_char.is_alphanumeric() {
+                            token_buffer.push(next_char);
+                        } else {
+                            self.previous_char = Some(next_char);
+                            break 'read_until_end_of_illegal_sequence;
+                        }
+                    } else {
+                        self.previous_char = None;
+                        break 'read_until_end_of_illegal_sequence;
+                    }
+                }
+
+                return Token::Illegal(Literal(token_buffer));
             } else {
                 self.previous_char = Some(current_char);
 
@@ -243,7 +261,11 @@ impl<'a> Lexer<'a> {
                     }
                 }
             }
-            illegal => Token::Illegal(Literal(illegal.to_string())),
+            illegal => {
+                self.previous_char = self.chars_iterator.next();
+
+                Token::Illegal(Literal(illegal.to_string()))
+            }
         }
     }
 
@@ -301,6 +323,9 @@ mod tests {
             diketahui the_result = add(five, number10);
             !-/*5;
             5 < 10 > 5;
+            4aa * 9
+
+            $
 
             jika (5 < 10) {
                 kembalikan benar;
@@ -377,6 +402,14 @@ mod tests {
             Token::GreaterThan,
             Token::Integer(5),
             Token::Semicolon,
+            //
+            // 4aa * 9
+            Token::Illegal(Literal("4aa".to_string())),
+            Token::Asterisk,
+            Token::Integer(9),
+            //
+            // $
+            Token::Illegal(Literal("$".to_string())),
             //
             // jika (5 < 10) {
             Token::If,
