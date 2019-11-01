@@ -3,7 +3,7 @@ use std::process;
 
 const PROMPT: &[u8] = b">> ";
 
-pub fn start(reader: &mut BufRead, writer: &mut Write) {
+pub fn start<R: BufRead, W: Write>(reader: &mut R, writer: &mut W) {
     let mut lines = reader.lines();
 
     loop {
