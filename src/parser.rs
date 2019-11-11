@@ -1,4 +1,4 @@
-use crate::ast::{Expression, Identifier, LetStatement, Program, Statement};
+use crate::ast::{Expression, Identifier, LetStatement, Program, ReturnStatement, Statement};
 use crate::lexer::Lexer;
 use crate::token::{Literal, Token};
 use std::vec::Vec;
@@ -29,13 +29,18 @@ impl<'a> Parser<'a> {
         self.peek_token = self.lexer.next();
     }
 
-    pub fn parse_program(&mut self) -> Result<Program, Vec<String>> {
+    fn has_token(&self) -> bool {
+        self.current_token.is_some()
+    }
+
+    pub fn parse_program(&mut self) -> Result<Program<'a>, Vec<String>> {
         let mut statements = Vec::new();
         let mut errors = Vec::new();
 
         'statements_parsing_loop: while let Some(token) = &self.current_token {
             let statement = match token {
                 Token::Let => self.parse_let_statement(),
+                Token::Return => self.parse_return_statement(),
                 _ => Err(format!("parsing error, unknown token {:?}", token)),
             };
 
@@ -70,14 +75,24 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_let_statement(&mut self) -> Result<Statement, String> {
+    fn parse_return_statement(&mut self) -> Result<Statement<'a>, String> {
+        self.next_token();
+
+        let value = self.parse_expression()?;
+
+        self.next_token();
+
+        Ok(Statement::Return(ReturnStatement::new(value)))
+    }
+
+    fn parse_let_statement(&mut self) -> Result<Statement<'a>, String> {
         self.next_token();
 
         let identifier = self.parse_identifier()?;
 
         self.next_token();
 
-        match Self::get_token_or_error(&self.current_token)? {
+        match Self::get_token_or_error(&self.current_token.clone())? {
             Token::Assign => {}
             illegal_token => {
                 return Err(format!(
@@ -97,7 +112,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Let(LetStatement::new(identifier, value)))
     }
 
-    fn parse_expression(&mut self) -> Result<Expression, String> {
+    fn parse_expression(&mut self) -> Result<Expression<'a>, String> {
         match Self::get_token_or_error(&self.current_token)? {
             Token::Integer(int) => Ok(Expression::Integer(*int)),
             token => Err(format!("expected expression, got {:?}", token)),
@@ -121,7 +136,7 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{Expression, Identifier, LetStatement, Statement};
+    use crate::ast::{Expression, Identifier, LetStatement, ReturnStatement, Statement};
     use crate::lexer::Lexer;
     use crate::token::Literal;
 
@@ -133,9 +148,7 @@ mod tests {
             diketahui foobar = 838383;
         ";
 
-        let mut lexer = Lexer::new(input);
-
-        let mut parser = super::Parser::new(lexer);
+        let mut parser = super::Parser::new(Lexer::new(input));
 
         let program = match parser.parse_program() {
             Ok(program) => program,
@@ -164,6 +177,43 @@ mod tests {
                 Identifier::new(Literal("foobar".to_string())),
                 Expression::Integer(838383),
             )),
+        ];
+
+        for (statement_index, expected_statement) in expected_statements.iter().enumerate() {
+            let statement = &program.statements[statement_index];
+
+            assert_eq!(statement, expected_statement);
+        }
+    }
+
+    #[test]
+    fn return_statements() {
+        let input = "
+            kembalikan 5;
+            kembalikan 10;
+            kembalikan 993322;
+        ";
+
+        let mut parser = super::Parser::new(Lexer::new(input));
+
+        let program = match parser.parse_program() {
+            Ok(program) => program,
+            Err(errors) => {
+                panic!(format!("parse_program returned errors {:?}", errors));
+            }
+        };
+
+        if program.statements.len() != 3 {
+            panic!(format!(
+                "program.statements does not contain 3 statements, got {}",
+                program.statements.len()
+            ));
+        }
+
+        let expected_statements = vec![
+            Statement::Return(ReturnStatement::new(Expression::Integer(5))),
+            Statement::Return(ReturnStatement::new(Expression::Integer(10))),
+            Statement::Return(ReturnStatement::new(Expression::Integer(993322))),
         ];
 
         for (statement_index, expected_statement) in expected_statements.iter().enumerate() {

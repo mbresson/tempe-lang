@@ -1,7 +1,16 @@
+
+use std::fmt;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Literal(pub String);
 
-#[derive(Debug, Eq, PartialEq)]
+impl fmt::Display for Literal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Token {
     Illegal(Literal),
 
