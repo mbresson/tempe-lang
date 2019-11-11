@@ -1,4 +1,4 @@
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Literal(pub String);
 
 #[derive(Debug, Eq, PartialEq)]
