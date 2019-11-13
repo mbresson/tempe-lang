@@ -1,7 +1,7 @@
 
 use std::fmt;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Literal(pub String);
 
 impl fmt::Display for Literal {

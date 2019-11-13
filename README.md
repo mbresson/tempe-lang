@@ -2,7 +2,7 @@
 # tempe-lang
 
 _tempe-lang_ is a toy project started after purchasing the book __Writing An Interpreter In Go__ from _Thorsten Ball_.
-I have two goals in doing this project: learning how interpreters work, and practicing programming in Rust.
+I have two goals in doing this project: learning how parsers and interpreters work, and practicing programming in Rust.
 
 # The language
 
@@ -20,3 +20,6 @@ diketahui twice = fn(f, x) {
 };
 ```
 
+# Disclaimer
+
+I'm aware that the source code of tempe-lang is ugly, bloated and that there is a lot of room for improvements. My objective was to get more used to writing Rust code and especially code dealing with lifetimes, and to write my first parser and interpreter. Writing elegant and concise code will be my goal for another project ;).

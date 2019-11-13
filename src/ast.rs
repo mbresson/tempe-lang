@@ -2,6 +2,17 @@ use crate::token::{keywords, Literal};
 use itertools::Itertools;
 use std::fmt;
 
+#[derive(PartialEq, PartialOrd)]
+pub enum Precedence {
+    Lowest = 0,
+    Equals,
+    LessOrGreater,
+    Sum,
+    Product,
+    Prefix,
+    Call, // function calls have the highest precedence
+}
+
 trait Node: fmt::Display + fmt::Debug + PartialEq {
     fn token_literal(&self) -> &Literal;
 }
@@ -41,6 +52,7 @@ impl<'a> Node for Identifier {
 
 #[derive(Debug, PartialEq)]
 pub enum Expression<'a> {
+    Identifier(Identifier),
     Integer(i64),
     Operation(OperationExpression<'a>),
 }
@@ -50,6 +62,7 @@ impl fmt::Display for Expression<'_> {
         match self {
             Self::Integer(val) => write!(f, "{}", val),
             Self::Operation(expression) => write!(f, "{}", expression),
+            Self::Identifier(identifier) => write!(f, "{}", identifier),
         }
     }
 }
@@ -146,9 +159,9 @@ pub struct ExpressionStatement<'a> {
 }
 
 impl ExpressionStatement<'_> {
-    pub fn new(token_literal: Literal, expression: Expression) -> ExpressionStatement {
+    pub fn new(expression: Expression) -> ExpressionStatement {
         ExpressionStatement {
-            token_literal,
+            token_literal: Literal(format!("{}", expression)),
             expression,
         }
     }
