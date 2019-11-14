@@ -130,7 +130,7 @@ pub struct LetStatement {
 impl LetStatement {
     pub fn new(name: Identifier, value: Expression) -> LetStatement {
         LetStatement {
-            token_literal: Literal(String::from(keywords::LET)),
+            token_literal: Literal(keywords::LET.to_string()),
             name,
             value,
         }
@@ -158,7 +158,7 @@ pub struct ReturnStatement {
 impl ReturnStatement {
     pub fn new(value: Expression) -> ReturnStatement {
         ReturnStatement {
-            token_literal: Literal(String::from(keywords::RETURN)),
+            token_literal: Literal(keywords::RETURN.to_string()),
             value,
         }
     }
@@ -211,7 +211,7 @@ mod tests {
     fn test_display() {
         let program = Program {
             statements: vec![Statement::Let(LetStatement::new(
-                Identifier::new(Literal(String::from("myVar"))),
+                Identifier::new(Literal("myVar".to_string())),
                 Expression::Integer(42),
             ))],
         };

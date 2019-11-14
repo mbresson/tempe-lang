@@ -173,7 +173,7 @@ impl<'a> Parser<'a> {
         let token = ParseableToken::try_from(
             self.current_token
                 .as_ref()
-                .ok_or_else(|| String::from("token expected, got None"))?,
+                .ok_or_else(|| "token expected, got None".to_string())?,
         )?;
 
         println!("TOKEN == {:?}\n\n", token);
@@ -342,7 +342,7 @@ mod tests {
         }
 
         let expected_identifier_expression = Statement::Expression(ExpressionStatement::new(
-            Expression::Identifier(Identifier::new(Literal(String::from("foobar")))),
+            Expression::Identifier(Identifier::new(Literal("foobar".to_string()))),
         ));
 
         assert_eq!(program.statements[0], expected_identifier_expression);

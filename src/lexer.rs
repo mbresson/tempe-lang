@@ -504,10 +504,10 @@ mod tests {
             Token::Integer(15),
             Token::Comma,
             Token::Minus,
-            Token::Identifier(Literal(String::from("ab"))),
+            Token::Identifier(Literal("ab".to_string())),
             Token::Comma,
             Token::Minus,
-            Token::Identifier(Literal(String::from("ab"))),
+            Token::Identifier(Literal("ab".to_string())),
             Token::OpeningParenthesis,
             Token::ClosingParenthesis,
         ];
