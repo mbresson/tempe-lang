@@ -5,7 +5,7 @@ use std::fmt;
 pub struct Literal(pub String);
 
 impl fmt::Display for Literal {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }

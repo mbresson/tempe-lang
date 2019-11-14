@@ -98,7 +98,7 @@ impl PrefixOperationExpression {
 }
 
 impl fmt::Display for PrefixOperationExpression {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({}{})", self.prefix_operator, self.right_expression)
     }
 }
@@ -111,7 +111,7 @@ pub enum Statement {
 }
 
 impl fmt::Display for Statement {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Let(statement) => write!(f, "{}", statement),
             Self::Return(statement) => write!(f, "{}", statement),
@@ -138,7 +138,7 @@ impl LetStatement {
 }
 
 impl fmt::Display for LetStatement {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} {} = {}", self.token_literal, self.name, self.value)
     }
 }
@@ -165,7 +165,7 @@ impl ReturnStatement {
 }
 
 impl fmt::Display for ReturnStatement {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} {}", self.token_literal, self.value)
     }
 }
