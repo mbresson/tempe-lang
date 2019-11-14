@@ -17,12 +17,12 @@ trait Node: fmt::Display + fmt::Debug + PartialEq {
     fn token_literal(&self) -> &Literal;
 }
 
-pub struct Program<'a> {
-    pub statements: Vec<Statement<'a>>,
+pub struct Program {
+    pub statements: Vec<Statement>,
 }
 
-impl fmt::Display for Program<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for Program {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{};", self.statements.iter().format(";\n"))
     }
 }
@@ -39,54 +39,78 @@ impl Identifier {
 }
 
 impl fmt::Display for Identifier {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.value)
     }
 }
 
-impl<'a> Node for Identifier {
+impl Node for Identifier {
     fn token_literal(&self) -> &Literal {
         &self.value
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Expression<'a> {
+pub enum Expression {
     Identifier(Identifier),
     Integer(i64),
-    Operation(OperationExpression<'a>),
+    PrefixOperation(PrefixOperationExpression),
 }
 
-impl fmt::Display for Expression<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for Expression {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Integer(val) => write!(f, "{}", val),
-            Self::Operation(expression) => write!(f, "{}", expression),
+            Self::PrefixOperation(expression) => write!(f, "{}", expression),
             Self::Identifier(identifier) => write!(f, "{}", identifier),
         }
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub struct OperationExpression<'a> {
-    left_expression: &'a Expression<'a>,
-    right_expression: &'a Expression<'a>,
+pub enum ExpressionOperator {
+    Bang,
+    Minus,
 }
 
-impl fmt::Display for OperationExpression<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", self.left_expression, self.right_expression)
+impl fmt::Display for ExpressionOperator {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Bang => write!(f, "!"),
+            Self::Minus => write!(f, "-"),
+        }
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Statement<'a> {
-    Let(LetStatement<'a>),
-    Return(ReturnStatement<'a>),
-    Expression(ExpressionStatement<'a>),
+pub struct PrefixOperationExpression {
+    prefix_operator: ExpressionOperator,
+    right_expression: Box<Expression>,
 }
 
-impl fmt::Display for Statement<'_> {
+impl PrefixOperationExpression {
+    pub fn new(prefix_operator: ExpressionOperator, right_expression: Expression) -> Self {
+        PrefixOperationExpression {
+            prefix_operator,
+            right_expression: Box::new(right_expression),
+        }
+    }
+}
+
+impl fmt::Display for PrefixOperationExpression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({}{})", self.prefix_operator, self.right_expression)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Statement {
+    Let(LetStatement),
+    Return(ReturnStatement),
+    Expression(ExpressionStatement),
+}
+
+impl fmt::Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Let(statement) => write!(f, "{}", statement),
@@ -97,13 +121,13 @@ impl fmt::Display for Statement<'_> {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct LetStatement<'a> {
+pub struct LetStatement {
     token_literal: Literal,
     name: Identifier,
-    value: Expression<'a>,
+    value: Expression,
 }
 
-impl LetStatement<'_> {
+impl LetStatement {
     pub fn new(name: Identifier, value: Expression) -> LetStatement {
         LetStatement {
             token_literal: Literal(String::from(keywords::LET)),
@@ -113,25 +137,25 @@ impl LetStatement<'_> {
     }
 }
 
-impl fmt::Display for LetStatement<'_> {
+impl fmt::Display for LetStatement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {} = {}", self.token_literal, self.name, self.value)
     }
 }
 
-impl<'a> Node for LetStatement<'_> {
+impl Node for LetStatement {
     fn token_literal(&self) -> &Literal {
         &self.token_literal
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub struct ReturnStatement<'a> {
+pub struct ReturnStatement {
     token_literal: Literal,
-    value: Expression<'a>,
+    value: Expression,
 }
 
-impl ReturnStatement<'_> {
+impl ReturnStatement {
     pub fn new(value: Expression) -> ReturnStatement {
         ReturnStatement {
             token_literal: Literal(String::from(keywords::RETURN)),
@@ -140,25 +164,25 @@ impl ReturnStatement<'_> {
     }
 }
 
-impl fmt::Display for ReturnStatement<'_> {
+impl fmt::Display for ReturnStatement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {}", self.token_literal, self.value)
     }
 }
 
-impl Node for ReturnStatement<'_> {
+impl Node for ReturnStatement {
     fn token_literal(&self) -> &Literal {
         &self.token_literal
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub struct ExpressionStatement<'a> {
+pub struct ExpressionStatement {
     token_literal: Literal,
-    expression: Expression<'a>,
+    expression: Expression,
 }
 
-impl ExpressionStatement<'_> {
+impl ExpressionStatement {
     pub fn new(expression: Expression) -> ExpressionStatement {
         ExpressionStatement {
             token_literal: Literal(format!("{}", expression)),
@@ -167,13 +191,13 @@ impl ExpressionStatement<'_> {
     }
 }
 
-impl fmt::Display for ExpressionStatement<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for ExpressionStatement {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.expression)
     }
 }
 
-impl<'a> Node for ExpressionStatement<'_> {
+impl Node for ExpressionStatement {
     fn token_literal(&self) -> &Literal {
         &self.token_literal
     }

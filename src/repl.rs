@@ -16,7 +16,7 @@ pub fn start<R: BufRead, W: Write>(reader: &mut R, writer: &mut W) {
                     let lexer = crate::lexer::Lexer::new(&line);
 
                     for token in lexer {
-                        write!(writer, "{:?}\n", token).unwrap();
+                        writeln!(writer, "{:?}", token).unwrap();
                     }
                 }
                 Err(err) => {

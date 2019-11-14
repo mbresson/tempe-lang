@@ -494,4 +494,35 @@ mod tests {
             }
         }
     }
+
+       #[test]
+    fn next_token_from_single_line_with_prefix_operator() {
+        let input = "-15, -ab, -ab()";
+
+        let expected_tokens = vec![
+            Token::Minus,
+            Token::Integer(15),
+            Token::Comma,
+            Token::Minus,
+            Token::Identifier(Literal(String::from("ab"))),
+            Token::Comma,
+            Token::Minus,
+            Token::Identifier(Literal(String::from("ab"))),
+            Token::OpeningParenthesis,
+            Token::ClosingParenthesis,
+        ];
+
+        let mut lexer = super::Lexer::new(input);
+
+        for expected_token in expected_tokens {
+            match lexer.next() {
+                Some(token) => {
+                    assert_eq!(token, expected_token);
+                }
+                None => {
+                    panic!("Expected to get a token");
+                }
+            }
+        }
+    }
 }

@@ -1,47 +1,52 @@
 use crate::ast::{
-    Expression, ExpressionStatement, Identifier, LetStatement, Precedence, Program,
-    ReturnStatement, Statement,
+    Expression, ExpressionOperator, ExpressionStatement, Identifier, LetStatement, Precedence,
+    PrefixOperationExpression, Program, ReturnStatement, Statement,
 };
 use crate::lexer::Lexer;
 use crate::token::Token;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::vec::Vec;
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub enum ParseableToken {
     Identifier,
     Integer,
-    Unparseable,
+    Bang,
+    Minus,
 }
 
-impl From<&Token> for ParseableToken {
-    fn from(token: &Token) -> ParseableToken {
+impl TryFrom<&Token> for ParseableToken {
+    type Error = String;
+
+    fn try_from(token: &Token) -> Result<Self, Self::Error> {
         match token {
-            Token::Identifier(_) => ParseableToken::Identifier,
-            Token::Integer(_) => ParseableToken::Integer,
-            _ => ParseableToken::Unparseable,
+            Token::Identifier(_) => Ok(ParseableToken::Identifier),
+            Token::Integer(_) => Ok(ParseableToken::Integer),
+            Token::Bang => Ok(ParseableToken::Bang),
+            Token::Minus => Ok(ParseableToken::Minus),
+            _ => Err(format!("unparseable token: {:?}", token)),
         }
     }
 }
 
-type PrefixParseFunction<'a> = dyn Fn(&mut Parser<'a>) -> Result<Expression<'a>, String>;
-type InfixParseFunction<'a> =
-    fn(left_side_expression: Expression) -> Result<Expression<'a>, String>;
+type PrefixParseFunction<'a> = dyn Fn(&mut Parser<'a>) -> Result<Expression, String>;
+type InfixParseFunction<'a> = dyn Fn(&mut Parser<'a>, Expression) -> Result<Expression, String>;
 
-struct Parser<'a> {
+pub struct Parser<'a> {
     lexer: Lexer<'a>,
 
     current_token: Option<Token>,
     peek_token: Option<Token>,
 
     prefix_parse_functions: HashMap<ParseableToken, &'a PrefixParseFunction<'a>>,
-    infix_parse_functions: HashMap<ParseableToken, InfixParseFunction<'a>>,
+    infix_parse_functions: HashMap<ParseableToken, &'a InfixParseFunction<'a>>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(lexer: Lexer<'a>) -> Self {
         let mut parser = Parser {
-            lexer: lexer,
+            lexer,
             current_token: None,
             peek_token: None,
 
@@ -51,6 +56,8 @@ impl<'a> Parser<'a> {
 
         parser.register_prefix_parser(ParseableToken::Identifier, &Self::parse_identifier);
         parser.register_prefix_parser(ParseableToken::Integer, &Self::parse_integer);
+        parser.register_prefix_parser(ParseableToken::Bang, &Self::parse_prefix_expression);
+        parser.register_prefix_parser(ParseableToken::Minus, &Self::parse_prefix_expression);
 
         parser.next_token();
         parser.next_token();
@@ -71,11 +78,7 @@ impl<'a> Parser<'a> {
         self.peek_token = self.lexer.next();
     }
 
-    fn has_token(&self) -> bool {
-        self.current_token.is_some()
-    }
-
-    pub fn parse_program(&mut self) -> Result<Program<'a>, Vec<String>> {
+    pub fn parse_program(&mut self) -> Result<Program, Vec<String>> {
         let mut statements = Vec::new();
         let mut errors = Vec::new();
 
@@ -95,8 +98,6 @@ impl<'a> Parser<'a> {
                 Ok(statement) => statement,
             };
 
-            println!("DEBUG: STATEMENT = {:?}", statement);
-
             statements.push(statement);
 
             self.next_token();
@@ -109,10 +110,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expression_statement(&mut self) -> Result<Statement<'a>, String> {
+    fn parse_expression_statement(&mut self) -> Result<Statement, String> {
         let expression = self.parse_expression(Precedence::Lowest);
 
-        self.jump_to_next_statement();
+        self.next_token();
 
         expression.map(|e| Statement::Expression(ExpressionStatement::new(e)))
     }
@@ -128,7 +129,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_return_statement(&mut self) -> Result<Statement<'a>, String> {
+    fn parse_return_statement(&mut self) -> Result<Statement, String> {
         self.next_token();
 
         let value = self.parse_expression(Precedence::Lowest)?;
@@ -138,7 +139,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Return(ReturnStatement::new(value)))
     }
 
-    fn parse_let_statement(&mut self) -> Result<Statement<'a>, String> {
+    fn parse_let_statement(&mut self) -> Result<Statement, String> {
         self.next_token();
 
         let identifier = match self.parse_identifier()? {
@@ -168,17 +169,16 @@ impl<'a> Parser<'a> {
         Ok(Statement::Let(LetStatement::new(identifier, value)))
     }
 
-    fn parse_expression(&mut self, precedence: Precedence) -> Result<Expression<'a>, String> {
-        let token = if let Some(token) = &self.current_token {
-            token
-        } else {
-            return Err(String::from("token expected, got None"));
-        };
+    fn parse_expression(&mut self, precedence: Precedence) -> Result<Expression, String> {
+        let token = ParseableToken::try_from(
+            self.current_token
+                .as_ref()
+                .ok_or_else(|| String::from("token expected, got None"))?,
+        )?;
 
-        let prefix_parser = match self
-            .prefix_parse_functions
-            .get(&ParseableToken::from(token))
-        {
+        println!("TOKEN == {:?}\n\n", token);
+
+        let prefix_parser = match self.prefix_parse_functions.get(&token) {
             Some(parser) => *parser,
             _ => return Err(format!("cannot parse token {:?} as prefix", token)),
         };
@@ -188,14 +188,14 @@ impl<'a> Parser<'a> {
         left_expression
     }
 
-    fn parse_integer(&mut self) -> Result<Expression<'a>, String> {
+    fn parse_integer(&mut self) -> Result<Expression, String> {
         match Self::get_token_or_error(&self.current_token)? {
             Token::Integer(int) => Ok(Expression::Integer(*int)),
             token => Err(format!("expected integer, got {:?}", token)),
         }
     }
 
-    fn parse_identifier(&mut self) -> Result<Expression<'a>, String> {
+    fn parse_identifier(&mut self) -> Result<Expression, String> {
         match Self::get_token_or_error(&self.current_token)? {
             Token::Identifier(literal) => {
                 Ok(Expression::Identifier(Identifier::new(literal.clone())))
@@ -204,10 +204,27 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_prefix_expression(&mut self) -> Result<Expression, String> {
+        let operator = match Self::get_token_or_error(&self.current_token)? {
+            Token::Bang => ExpressionOperator::Bang,
+            Token::Minus => ExpressionOperator::Minus,
+            token => {
+                return Err(format!("expected prefix operator, got {:?}", token));
+            }
+        };
+
+        self.next_token();
+
+        Ok(Expression::PrefixOperation(PrefixOperationExpression::new(
+            operator,
+            self.parse_expression(Precedence::Prefix)?,
+        )))
+    }
+
     fn get_token_or_error(tentative_token: &Option<Token>) -> Result<&Token, String> {
         match tentative_token {
             Some(token) => Ok(token),
-            None => Err(format!("expected token, got none")),
+            None => Err("expected token, got none".to_string()),
         }
     }
 }
@@ -215,7 +232,8 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use crate::ast::{
-        Expression, ExpressionStatement, Identifier, LetStatement, ReturnStatement, Statement,
+        Expression, ExpressionOperator, ExpressionStatement, Identifier, LetStatement,
+        PrefixOperationExpression, ReturnStatement, Statement,
     };
     use crate::lexer::Lexer;
     use crate::token::Literal;
@@ -255,7 +273,7 @@ mod tests {
             )),
             Statement::Let(LetStatement::new(
                 Identifier::new(Literal("foobar".to_string())),
-                Expression::Integer(838383),
+                Expression::Integer(838_383),
             )),
         ];
 
@@ -293,7 +311,7 @@ mod tests {
         let expected_statements = vec![
             Statement::Return(ReturnStatement::new(Expression::Integer(5))),
             Statement::Return(ReturnStatement::new(Expression::Integer(10))),
-            Statement::Return(ReturnStatement::new(Expression::Integer(993322))),
+            Statement::Return(ReturnStatement::new(Expression::Integer(993_322))),
         ];
 
         for (statement_index, expected_statement) in expected_statements.iter().enumerate() {
@@ -346,16 +364,46 @@ mod tests {
             }
         };
 
-        if program.statements.len() != 1 {
+        let expected_expressions = vec![
+            Statement::Expression(ExpressionStatement::new(Expression::Integer(42))),
+            Statement::Expression(ExpressionStatement::new(Expression::Integer(52))),
+        ];
+
+        assert_eq!(program.statements, expected_expressions);
+    }
+
+    #[test]
+    fn prefix_expressions() {
+        let input = "
+            !5;
+            -15;
+        ";
+
+        let mut parser = super::Parser::new(Lexer::new(input));
+
+        let program = match parser.parse_program() {
+            Ok(program) => program,
+            Err(errors) => {
+                panic!(format!("parse_program returned errors {:?}", errors));
+            }
+        };
+
+        if program.statements.len() != 2 {
             panic!(format!(
-                "program.statements does not contain 1 statement, got {}",
+                "program.statements does not contain 2 statements, got {}",
                 program.statements.len()
             ));
         }
 
-        let expected_integer_expression =
-            Statement::Expression(ExpressionStatement::new(Expression::Integer(42)));
+        let expected_expressions = vec![
+            Statement::Expression(ExpressionStatement::new(Expression::PrefixOperation(
+                PrefixOperationExpression::new(ExpressionOperator::Bang, Expression::Integer(5)),
+            ))),
+            Statement::Expression(ExpressionStatement::new(Expression::PrefixOperation(
+                PrefixOperationExpression::new(ExpressionOperator::Minus, Expression::Integer(15)),
+            ))),
+        ];
 
-        assert_eq!(program.statements[0], expected_integer_expression);
+        assert_eq!(program.statements, expected_expressions);
     }
 }
