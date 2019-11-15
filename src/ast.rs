@@ -13,6 +13,18 @@ pub enum Precedence {
     Call, // function calls have the highest precedence
 }
 
+impl From<&ExpressionOperator> for Precedence {
+    fn from(operator: &ExpressionOperator) -> Self {
+        match operator {
+            ExpressionOperator::Bang => Precedence::Prefix,
+            ExpressionOperator::Plus | ExpressionOperator::Minus => Precedence::Sum,
+            ExpressionOperator::Divide | ExpressionOperator::Multiply => Precedence::Product,
+            ExpressionOperator::Equal | ExpressionOperator::NotEqual => Precedence::Equals,
+            ExpressionOperator::GreaterThan | ExpressionOperator::LessThan => Precedence::LessOrGreater,
+        }
+    }
+}
+
 trait Node: fmt::Display + fmt::Debug + PartialEq {
     fn token_literal(&self) -> &Literal;
 }
@@ -55,6 +67,7 @@ pub enum Expression {
     Identifier(Identifier),
     Integer(i64),
     PrefixOperation(PrefixOperationExpression),
+    InfixOperation(InfixOperationExpression),
 }
 
 impl fmt::Display for Expression {
@@ -62,6 +75,7 @@ impl fmt::Display for Expression {
         match self {
             Self::Integer(val) => write!(f, "{}", val),
             Self::PrefixOperation(expression) => write!(f, "{}", expression),
+            Self::InfixOperation(expression) => write!(f, "{}", expression),
             Self::Identifier(identifier) => write!(f, "{}", identifier),
         }
     }
@@ -71,6 +85,13 @@ impl fmt::Display for Expression {
 pub enum ExpressionOperator {
     Bang,
     Minus,
+    Plus,
+    Multiply,
+    Divide,
+    GreaterThan,
+    LessThan,
+    Equal,
+    NotEqual,
 }
 
 impl fmt::Display for ExpressionOperator {
@@ -78,6 +99,13 @@ impl fmt::Display for ExpressionOperator {
         match self {
             Self::Bang => write!(f, "!"),
             Self::Minus => write!(f, "-"),
+            Self::Plus => write!(f, "+"),
+            Self::Multiply => write!(f, "*"),
+            Self::Divide => write!(f, "/"),
+            Self::GreaterThan => write!(f, ">"),
+            Self::LessThan => write!(f, "<"),
+            Self::Equal => write!(f, "=="),
+            Self::NotEqual => write!(f, "!="),
         }
     }
 }
@@ -100,6 +128,29 @@ impl PrefixOperationExpression {
 impl fmt::Display for PrefixOperationExpression {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({}{})", self.prefix_operator, self.right_expression)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct InfixOperationExpression {
+    infix_operator: ExpressionOperator,
+    left_expression: Box<Expression>,
+    right_expression: Box<Expression>,
+}
+
+impl InfixOperationExpression {
+    pub fn new(infix_operator: ExpressionOperator, left_expression: Expression, right_expression: Expression) -> Self {
+        InfixOperationExpression {
+            infix_operator,
+            left_expression: Box::new(left_expression),
+            right_expression: Box::new(right_expression),
+        }
+    }
+}
+
+impl fmt::Display for InfixOperationExpression {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({} {} {})", self.left_expression, self.infix_operator, self.right_expression)
     }
 }
 
