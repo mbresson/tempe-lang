@@ -47,6 +47,8 @@ impl<'a> Parser<'a> {
                 Ok(Expression::Identifier(Identifier::new(literal.clone())))
             }
             Token::Integer(integer) => Ok(Expression::Integer(*integer)),
+            Token::True => Ok(Expression::Boolean(true)),
+            Token::False => Ok(Expression::Boolean(false)),
             Token::Minus | Token::Bang => self.parse_prefix_expression(),
             token => Err(format!("cannot parse token {:?} as prefix", token)),
         }
@@ -241,6 +243,12 @@ mod tests {
     use crate::lexer::Lexer;
     use crate::token::Literal;
 
+    fn parse(input: &str) -> Result<super::Program, String> {
+        super::Parser::new(Lexer::new(input))
+            .parse_program()
+            .map_err(|errors| format!("parse_program returned errors {:?}", errors))
+    }
+
     #[test]
     fn let_statements() {
         let input = "
@@ -249,11 +257,7 @@ mod tests {
             diketahui foobar = 838383;
         ";
 
-        let mut parser = super::Parser::new(Lexer::new(input));
-
-        let program = parser
-            .parse_program()
-            .unwrap_or_else(|errors| panic!(format!("parse_program returned errors {:?}", errors)));
+        let program = parse(input).unwrap();
 
         let expected_statements = vec![
             Statement::Let(LetStatement::new(
@@ -285,11 +289,7 @@ mod tests {
             kembalikan 993322;
         ";
 
-        let mut parser = super::Parser::new(Lexer::new(input));
-
-        let program = parser
-            .parse_program()
-            .unwrap_or_else(|errors| panic!(format!("parse_program returned errors {:?}", errors)));
+        let program = parse(input).unwrap();
 
         let expected_statements = vec![
             Statement::Return(ReturnStatement::new(Expression::Integer(5))),
@@ -308,11 +308,7 @@ mod tests {
     fn identifier_expressions() {
         let input = "foobar;";
 
-        let mut parser = super::Parser::new(Lexer::new(input));
-
-        let program = parser
-            .parse_program()
-            .unwrap_or_else(|errors| panic!(format!("parse_program returned errors {:?}", errors)));
+        let program = parse(input).unwrap();
 
         let expected_identifier_expression = Statement::Expression(ExpressionStatement::new(
             Expression::Identifier(Identifier::new(Literal("foobar".to_string()))),
@@ -328,15 +324,28 @@ mod tests {
             52
         ";
 
-        let mut parser = super::Parser::new(Lexer::new(input));
-
-        let program = parser
-            .parse_program()
-            .unwrap_or_else(|errors| panic!(format!("parse_program returned errors {:?}", errors)));
+        let program = parse(input).unwrap();
 
         let expected_expressions = vec![
             Statement::Expression(ExpressionStatement::new(Expression::Integer(42))),
             Statement::Expression(ExpressionStatement::new(Expression::Integer(52))),
+        ];
+
+        assert_eq!(program.statements, expected_expressions);
+    }
+
+    #[test]
+    fn boolean_expressions() {
+        let input = "
+            benar;
+            salah
+        ";
+
+        let program = parse(input).unwrap();
+
+        let expected_expressions = vec![
+            Statement::Expression(ExpressionStatement::new(Expression::Boolean(true))),
+            Statement::Expression(ExpressionStatement::new(Expression::Boolean(false))),
         ];
 
         assert_eq!(program.statements, expected_expressions);
@@ -349,11 +358,7 @@ mod tests {
             -15;
         ";
 
-        let mut parser = super::Parser::new(Lexer::new(input));
-
-        let program = parser
-            .parse_program()
-            .unwrap_or_else(|errors| panic!(format!("parse_program returned errors {:?}", errors)));
+        let program = parse(input).unwrap();
 
         let expected_expressions = vec![
             Statement::Expression(ExpressionStatement::new(Expression::PrefixOperation(
@@ -381,11 +386,7 @@ mod tests {
             5 != 6;
         "#;
 
-        let mut parser = super::Parser::new(Lexer::new(input));
-
-        let program = parser
-            .parse_program()
-            .unwrap_or_else(|errors| panic!(format!("parse_program returned errors {:?}", errors)));
+        let program = parse(input).unwrap();
 
         let expected_expressions = vec![
             Statement::Expression(ExpressionStatement::new(Expression::InfixOperation(
@@ -516,11 +517,7 @@ mod tests {
         ];
 
         for input_and_expected in input {
-            let mut parser = super::Parser::new(Lexer::new(input_and_expected.input));
-
-            let program = parser.parse_program().unwrap_or_else(|errors| {
-                panic!(format!("parse_program returned errors {:?}", errors))
-            });
+            let program = parse(input_and_expected.input).unwrap();
 
             assert_eq!(format!("{}", program), input_and_expected.expected);
         }

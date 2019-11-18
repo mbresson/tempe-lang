@@ -66,6 +66,7 @@ impl Node for Identifier {
 pub enum Expression {
     Identifier(Identifier),
     Integer(i64),
+    Boolean(bool),
     PrefixOperation(PrefixOperationExpression),
     InfixOperation(InfixOperationExpression),
 }
@@ -73,6 +74,7 @@ pub enum Expression {
 impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Self::Boolean(boolean) => write!(f, "{}", boolean),
             Self::Integer(val) => write!(f, "{}", val),
             Self::PrefixOperation(expression) => write!(f, "{}", expression),
             Self::InfixOperation(expression) => write!(f, "{}", expression),
