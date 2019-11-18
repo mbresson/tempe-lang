@@ -356,6 +356,8 @@ mod tests {
         let input = "
             !5;
             -15;
+            !benar;
+            !salah;
         ";
 
         let program = parse(input).unwrap();
@@ -366,6 +368,12 @@ mod tests {
             ))),
             Statement::Expression(ExpressionStatement::new(Expression::PrefixOperation(
                 PrefixOperationExpression::new(ExpressionOperator::Minus, Expression::Integer(15)),
+            ))),
+            Statement::Expression(ExpressionStatement::new(Expression::PrefixOperation(
+                PrefixOperationExpression::new(ExpressionOperator::Bang, Expression::Boolean(true)),
+            ))),
+            Statement::Expression(ExpressionStatement::new(Expression::PrefixOperation(
+                PrefixOperationExpression::new(ExpressionOperator::Bang, Expression::Boolean(false)),
             ))),
         ];
 
@@ -384,6 +392,9 @@ mod tests {
             5 < 6;
             5 == 6;
             5 != 6;
+            benar == benar;
+            benar != salah;
+            salah == salah;
         "#;
 
         let program = parse(input).unwrap();
@@ -452,13 +463,34 @@ mod tests {
                     Expression::Integer(6),
                 ),
             ))),
+            Statement::Expression(ExpressionStatement::new(Expression::InfixOperation(
+                InfixOperationExpression::new(
+                    ExpressionOperator::Equal,
+                    Expression::Boolean(true),
+                    Expression::Boolean(true),
+                ),
+            ))),
+            Statement::Expression(ExpressionStatement::new(Expression::InfixOperation(
+                InfixOperationExpression::new(
+                    ExpressionOperator::NotEqual,
+                    Expression::Boolean(true),
+                    Expression::Boolean(false),
+                ),
+            ))),
+            Statement::Expression(ExpressionStatement::new(Expression::InfixOperation(
+                InfixOperationExpression::new(
+                    ExpressionOperator::Equal,
+                    Expression::Boolean(false),
+                    Expression::Boolean(false),
+                ),
+            ))),
         ];
 
         assert_eq!(program.statements, expected_expressions);
     }
 
     #[test]
-    fn complex_infix_expressions() {
+    fn infix_expressions_with_operator_precedence() {
         struct InputAndExpected {
             input: &'static str,
             expected: &'static str,
@@ -513,6 +545,22 @@ mod tests {
             InputAndExpected {
                 input: "3 + 4 * 5 == 3 * 1 + 4 * 5",
                 expected: "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)));",
+            },
+            InputAndExpected {
+                input: "benar",
+                expected: "benar;",
+            },
+            InputAndExpected {
+                input: "salah",
+                expected: "salah;",
+            },
+            InputAndExpected {
+                input: "3 > 5 == false",
+                expected: "((3 > 5) == false);",
+            },
+            InputAndExpected {
+                input: "3 < 5 == true",
+                expected: "((3 < 5) == true);",
             },
         ];
 
