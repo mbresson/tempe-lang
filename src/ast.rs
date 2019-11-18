@@ -161,7 +161,7 @@ impl fmt::Display for InfixOperationExpression {
 pub enum Statement {
     Let(LetStatement),
     Return(ReturnStatement),
-    Expression(ExpressionStatement),
+    Expression(Expression),
 }
 
 impl fmt::Display for Statement {
@@ -225,33 +225,6 @@ impl fmt::Display for ReturnStatement {
 }
 
 impl Node for ReturnStatement {
-    fn token_literal(&self) -> &Literal {
-        &self.token_literal
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct ExpressionStatement {
-    token_literal: Literal,
-    expression: Expression,
-}
-
-impl ExpressionStatement {
-    pub fn new(expression: Expression) -> ExpressionStatement {
-        ExpressionStatement {
-            token_literal: Literal(format!("{}", expression)),
-            expression,
-        }
-    }
-}
-
-impl fmt::Display for ExpressionStatement {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.expression)
-    }
-}
-
-impl Node for ExpressionStatement {
     fn token_literal(&self) -> &Literal {
         &self.token_literal
     }
