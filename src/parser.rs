@@ -4,57 +4,13 @@ use crate::ast::{
 };
 use crate::lexer::Lexer;
 use crate::token::Token;
-use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::vec::Vec;
-
-#[derive(Debug, Eq, Hash, PartialEq)]
-pub enum ParseableToken {
-    Identifier,
-    Integer,
-    Bang,
-    Minus,
-    Plus,
-    Slash,
-    Asterisk,
-    Equal,
-    NotEqual,
-    LessThan,
-    GreaterThan,
-}
-
-impl TryFrom<&Token> for ParseableToken {
-    type Error = String;
-
-    fn try_from(token: &Token) -> Result<Self, Self::Error> {
-        match token {
-            Token::Identifier(_) => Ok(ParseableToken::Identifier),
-            Token::Integer(_) => Ok(ParseableToken::Integer),
-            Token::Bang => Ok(ParseableToken::Bang),
-            Token::Minus => Ok(ParseableToken::Minus),
-            Token::Plus => Ok(ParseableToken::Plus),
-            Token::Slash => Ok(ParseableToken::Slash),
-            Token::Asterisk => Ok(ParseableToken::Asterisk),
-            Token::Equal => Ok(ParseableToken::Equal),
-            Token::NotEqual => Ok(ParseableToken::NotEqual),
-            Token::LessThan => Ok(ParseableToken::LessThan),
-            Token::GreaterThan => Ok(ParseableToken::GreaterThan),
-            _ => Err(format!("unparseable token: {:?}", token)),
-        }
-    }
-}
-
-type PrefixParseFunction<'a> = dyn Fn(&mut Parser<'a>) -> Result<Expression, String>;
-type InfixParseFunction<'a> = dyn Fn(&mut Parser<'a>, Expression) -> Result<Expression, String>;
 
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
 
     current_token: Option<Token>,
     peek_token: Option<Token>,
-
-    prefix_parse_functions: HashMap<ParseableToken, &'a PrefixParseFunction<'a>>,
-    infix_parse_functions: HashMap<ParseableToken, &'a InfixParseFunction<'a>>,
 }
 
 impl<'a> Parser<'a> {
@@ -63,53 +19,37 @@ impl<'a> Parser<'a> {
             lexer,
             current_token: None,
             peek_token: None,
-
-            prefix_parse_functions: HashMap::new(),
-            infix_parse_functions: HashMap::new(),
         };
 
-        parser
-            .prefix_parse_functions
-            .insert(ParseableToken::Identifier, &Self::parse_identifier);
-        parser
-            .prefix_parse_functions
-            .insert(ParseableToken::Integer, &Self::parse_integer);
-        parser
-            .prefix_parse_functions
-            .insert(ParseableToken::Bang, &Self::parse_prefix_expression);
-        parser
-            .prefix_parse_functions
-            .insert(ParseableToken::Minus, &Self::parse_prefix_expression);
-
-        parser
-            .infix_parse_functions
-            .insert(ParseableToken::Plus, &Self::parse_infix_expression);
-        parser
-            .infix_parse_functions
-            .insert(ParseableToken::Minus, &Self::parse_infix_expression);
-        parser
-            .infix_parse_functions
-            .insert(ParseableToken::Slash, &Self::parse_infix_expression);
-        parser
-            .infix_parse_functions
-            .insert(ParseableToken::Asterisk, &Self::parse_infix_expression);
-        parser
-            .infix_parse_functions
-            .insert(ParseableToken::Equal, &Self::parse_infix_expression);
-        parser
-            .infix_parse_functions
-            .insert(ParseableToken::NotEqual, &Self::parse_infix_expression);
-        parser
-            .infix_parse_functions
-            .insert(ParseableToken::LessThan, &Self::parse_infix_expression);
-        parser
-            .infix_parse_functions
-            .insert(ParseableToken::GreaterThan, &Self::parse_infix_expression);
-
         parser.next_token();
         parser.next_token();
 
         parser
+    }
+
+    fn parse_infix(&mut self, left_expression: Expression) -> Result<Expression, String> {
+        match Self::get_token_or_error(&self.current_token)? {
+            Token::Plus
+            | Token::Minus
+            | Token::Slash
+            | Token::Asterisk
+            | Token::Equal
+            | Token::NotEqual
+            | Token::LessThan
+            | Token::GreaterThan => self.parse_infix_expression(left_expression),
+            token => Err(format!("expected infix operator, got {:?}", token)),
+        }
+    }
+
+    fn parse_prefix(&mut self) -> Result<Expression, String> {
+        match Self::get_token_or_error(&self.current_token)? {
+            Token::Identifier(literal) => {
+                Ok(Expression::Identifier(Identifier::new(literal.clone())))
+            }
+            Token::Integer(integer) => Ok(Expression::Integer(*integer)),
+            Token::Minus | Token::Bang => self.parse_prefix_expression(),
+            token => Err(format!("cannot parse token {:?} as prefix", token)),
+        }
     }
 
     fn next_token(&mut self) {
@@ -181,9 +121,11 @@ impl<'a> Parser<'a> {
     fn parse_let_statement(&mut self) -> Result<Statement, String> {
         self.next_token();
 
-        let identifier = match self.parse_identifier()? {
-            Expression::Identifier(identifier) => identifier,
-            expression => return Err(format!("expected identifier, found {}", expression)),
+        let identifier = match Self::get_token_or_error(&self.current_token)? {
+            Token::Identifier(literal) => Identifier::new(literal.clone()),
+            token => {
+                return Err(format!("expected identifier, got {:?}", token));
+            }
         };
 
         self.next_token();
@@ -209,18 +151,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expression(&mut self, precedence: Precedence) -> Result<Expression, String> {
-        let token = ParseableToken::try_from(
-            self.current_token
-                .as_ref()
-                .ok_or_else(|| "token expected, got None".to_string())?,
-        )?;
-
-        let prefix_parser = match self.prefix_parse_functions.get(&token) {
-            Some(parser) => *parser,
-            _ => return Err(format!("cannot parse token {:?} as prefix", token)),
-        };
-
-        let mut left_expression = prefix_parser(self)?;
+        let mut left_expression = self.parse_prefix()?;
 
         'parsing_expression: while let Some(following_token) = &self.peek_token {
             let following_operator =
@@ -230,44 +161,16 @@ impl<'a> Parser<'a> {
                     break 'parsing_expression;
                 };
 
-            let following_parseable_token =
-                if let Ok(parseable_token) = ParseableToken::try_from(following_token) {
-                    parseable_token
-                } else {
-                    break 'parsing_expression;
-                };
-
             if Precedence::from(&following_operator) <= precedence {
                 break 'parsing_expression;
             }
 
-            let infix_parser = match self.infix_parse_functions.get(&following_parseable_token) {
-                Some(parser) => *parser,
-                _ => return Ok(left_expression),
-            };
-
             self.next_token();
 
-            left_expression = infix_parser(self, left_expression)?;
+            left_expression = self.parse_infix(left_expression)?;
         }
 
         Ok(left_expression)
-    }
-
-    fn parse_integer(&mut self) -> Result<Expression, String> {
-        match Self::get_token_or_error(&self.current_token)? {
-            Token::Integer(int) => Ok(Expression::Integer(*int)),
-            token => Err(format!("expected integer, got {:?}", token)),
-        }
-    }
-
-    fn parse_identifier(&mut self) -> Result<Expression, String> {
-        match Self::get_token_or_error(&self.current_token)? {
-            Token::Identifier(literal) => {
-                Ok(Expression::Identifier(Identifier::new(literal.clone())))
-            }
-            token => Err(format!("expected identifier, got {:?}", token)),
-        }
     }
 
     fn parse_prefix_expression(&mut self) -> Result<Expression, String> {
