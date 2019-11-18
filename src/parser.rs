@@ -1,6 +1,6 @@
 use crate::ast::{
-    Expression, ExpressionOperator, Identifier, InfixOperationExpression,
-    LetStatement, Precedence, PrefixOperationExpression, Program, ReturnStatement, Statement,
+    Expression, ExpressionOperator, Identifier, InfixOperationExpression, LetStatement, Precedence,
+    PrefixOperationExpression, Program, ReturnStatement, Statement,
 };
 use crate::lexer::Lexer;
 use crate::token::Token;
@@ -50,6 +50,7 @@ impl<'a> Parser<'a> {
             Token::True => Ok(Expression::Boolean(true)),
             Token::False => Ok(Expression::Boolean(false)),
             Token::Minus | Token::Bang => self.parse_prefix_expression(),
+            Token::OpeningParenthesis => self.parse_grouped_expression(),
             token => Err(format!("cannot parse token {:?} as prefix", token)),
         }
     }
@@ -192,6 +193,20 @@ impl<'a> Parser<'a> {
         )))
     }
 
+    fn parse_grouped_expression(&mut self) -> Result<Expression, String> {
+        self.next_token();
+
+        let expression = self.parse_expression(Precedence::Lowest);
+
+        match Self::get_token_or_error(&self.peek_token)? {
+            Token::ClosingParenthesis => {
+                self.next_token();
+                expression
+            },
+            token => Err(format!("expected closing parenthesis, got {:?}", token)),
+        }
+    }
+
     fn token_to_infix_operator(token: &Token) -> Option<ExpressionOperator> {
         match token {
             Token::Plus => Some(ExpressionOperator::Plus),
@@ -237,8 +252,8 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use crate::ast::{
-        Expression, ExpressionOperator, Identifier, InfixOperationExpression,
-        LetStatement, PrefixOperationExpression, ReturnStatement, Statement,
+        Expression, ExpressionOperator, Identifier, InfixOperationExpression, LetStatement,
+        PrefixOperationExpression, ReturnStatement, Statement,
     };
     use crate::lexer::Lexer;
     use crate::token::Literal;
@@ -310,9 +325,9 @@ mod tests {
 
         let program = parse(input).unwrap();
 
-        let expected_identifier_expression = Statement::Expression(
-            Expression::Identifier(Identifier::new(Literal("foobar".to_string()))),
-        );
+        let expected_identifier_expression = Statement::Expression(Expression::Identifier(
+            Identifier::new(Literal("foobar".to_string())),
+        ));
 
         assert_eq!(program.statements[0], expected_identifier_expression);
     }
@@ -363,18 +378,22 @@ mod tests {
         let program = parse(input).unwrap();
 
         let expected_expressions = vec![
-            Statement::Expression(Expression::PrefixOperation(
-                PrefixOperationExpression::new(ExpressionOperator::Bang, Expression::Integer(5)),
-            )),
-            Statement::Expression(Expression::PrefixOperation(
-                PrefixOperationExpression::new(ExpressionOperator::Minus, Expression::Integer(15)),
-            )),
-            Statement::Expression(Expression::PrefixOperation(
-                PrefixOperationExpression::new(ExpressionOperator::Bang, Expression::Boolean(true)),
-            )),
-            Statement::Expression(Expression::PrefixOperation(
-                PrefixOperationExpression::new(ExpressionOperator::Bang, Expression::Boolean(false)),
-            )),
+            Statement::Expression(Expression::PrefixOperation(PrefixOperationExpression::new(
+                ExpressionOperator::Bang,
+                Expression::Integer(5),
+            ))),
+            Statement::Expression(Expression::PrefixOperation(PrefixOperationExpression::new(
+                ExpressionOperator::Minus,
+                Expression::Integer(15),
+            ))),
+            Statement::Expression(Expression::PrefixOperation(PrefixOperationExpression::new(
+                ExpressionOperator::Bang,
+                Expression::Boolean(true),
+            ))),
+            Statement::Expression(Expression::PrefixOperation(PrefixOperationExpression::new(
+                ExpressionOperator::Bang,
+                Expression::Boolean(false),
+            ))),
         ];
 
         assert_eq!(program.statements, expected_expressions);
@@ -400,90 +419,66 @@ mod tests {
         let program = parse(input).unwrap();
 
         let expected_expressions = vec![
-            Statement::Expression(Expression::InfixOperation(
-                InfixOperationExpression::new(
-                    ExpressionOperator::Plus,
-                    Expression::Integer(5),
-                    Expression::Integer(6),
-                ),
-            )),
-            Statement::Expression(Expression::InfixOperation(
-                InfixOperationExpression::new(
-                    ExpressionOperator::Plus,
-                    Expression::Integer(5),
-                    Expression::Identifier(Identifier::new(Literal("ab".to_string()))),
-                ),
-            )),
-            Statement::Expression(Expression::InfixOperation(
-                InfixOperationExpression::new(
-                    ExpressionOperator::Minus,
-                    Expression::Integer(5),
-                    Expression::Integer(6),
-                ),
-            )),
-            Statement::Expression(Expression::InfixOperation(
-                InfixOperationExpression::new(
-                    ExpressionOperator::Multiply,
-                    Expression::Integer(5),
-                    Expression::Integer(6),
-                ),
-            )),
-            Statement::Expression(Expression::InfixOperation(
-                InfixOperationExpression::new(
-                    ExpressionOperator::Divide,
-                    Expression::Integer(5),
-                    Expression::Integer(6),
-                ),
-            )),
-            Statement::Expression(Expression::InfixOperation(
-                InfixOperationExpression::new(
-                    ExpressionOperator::GreaterThan,
-                    Expression::Integer(5),
-                    Expression::Integer(6),
-                ),
-            )),
-            Statement::Expression(Expression::InfixOperation(
-                InfixOperationExpression::new(
-                    ExpressionOperator::LessThan,
-                    Expression::Integer(5),
-                    Expression::Integer(6),
-                ),
-            )),
-            Statement::Expression(Expression::InfixOperation(
-                InfixOperationExpression::new(
-                    ExpressionOperator::Equal,
-                    Expression::Integer(5),
-                    Expression::Integer(6),
-                ),
-            )),
-            Statement::Expression(Expression::InfixOperation(
-                InfixOperationExpression::new(
-                    ExpressionOperator::NotEqual,
-                    Expression::Integer(5),
-                    Expression::Integer(6),
-                ),
-            )),
-            Statement::Expression(Expression::InfixOperation(
-                InfixOperationExpression::new(
-                    ExpressionOperator::Equal,
-                    Expression::Boolean(true),
-                    Expression::Boolean(true),
-                ),
-            )),
-            Statement::Expression(Expression::InfixOperation(
-                InfixOperationExpression::new(
-                    ExpressionOperator::NotEqual,
-                    Expression::Boolean(true),
-                    Expression::Boolean(false),
-                ),
-            )),
-            Statement::Expression(Expression::InfixOperation(
-                InfixOperationExpression::new(
-                    ExpressionOperator::Equal,
-                    Expression::Boolean(false),
-                    Expression::Boolean(false),
-                ),
-            )),
+            Statement::Expression(Expression::InfixOperation(InfixOperationExpression::new(
+                ExpressionOperator::Plus,
+                Expression::Integer(5),
+                Expression::Integer(6),
+            ))),
+            Statement::Expression(Expression::InfixOperation(InfixOperationExpression::new(
+                ExpressionOperator::Plus,
+                Expression::Integer(5),
+                Expression::Identifier(Identifier::new(Literal("ab".to_string()))),
+            ))),
+            Statement::Expression(Expression::InfixOperation(InfixOperationExpression::new(
+                ExpressionOperator::Minus,
+                Expression::Integer(5),
+                Expression::Integer(6),
+            ))),
+            Statement::Expression(Expression::InfixOperation(InfixOperationExpression::new(
+                ExpressionOperator::Multiply,
+                Expression::Integer(5),
+                Expression::Integer(6),
+            ))),
+            Statement::Expression(Expression::InfixOperation(InfixOperationExpression::new(
+                ExpressionOperator::Divide,
+                Expression::Integer(5),
+                Expression::Integer(6),
+            ))),
+            Statement::Expression(Expression::InfixOperation(InfixOperationExpression::new(
+                ExpressionOperator::GreaterThan,
+                Expression::Integer(5),
+                Expression::Integer(6),
+            ))),
+            Statement::Expression(Expression::InfixOperation(InfixOperationExpression::new(
+                ExpressionOperator::LessThan,
+                Expression::Integer(5),
+                Expression::Integer(6),
+            ))),
+            Statement::Expression(Expression::InfixOperation(InfixOperationExpression::new(
+                ExpressionOperator::Equal,
+                Expression::Integer(5),
+                Expression::Integer(6),
+            ))),
+            Statement::Expression(Expression::InfixOperation(InfixOperationExpression::new(
+                ExpressionOperator::NotEqual,
+                Expression::Integer(5),
+                Expression::Integer(6),
+            ))),
+            Statement::Expression(Expression::InfixOperation(InfixOperationExpression::new(
+                ExpressionOperator::Equal,
+                Expression::Boolean(true),
+                Expression::Boolean(true),
+            ))),
+            Statement::Expression(Expression::InfixOperation(InfixOperationExpression::new(
+                ExpressionOperator::NotEqual,
+                Expression::Boolean(true),
+                Expression::Boolean(false),
+            ))),
+            Statement::Expression(Expression::InfixOperation(InfixOperationExpression::new(
+                ExpressionOperator::Equal,
+                Expression::Boolean(false),
+                Expression::Boolean(false),
+            ))),
         ];
 
         assert_eq!(program.statements, expected_expressions);
@@ -561,6 +556,26 @@ mod tests {
             InputAndExpected {
                 input: "3 < 5 == true",
                 expected: "((3 < 5) == true);",
+            },
+            InputAndExpected {
+                input: "1 + (2 + 3) + 4",
+                expected: "((1 + (2 + 3)) + 4);",
+            },
+            InputAndExpected {
+                input: "(5 + 5) * 2",
+                expected: "((5 + 5) * 2);",
+            },
+            InputAndExpected {
+                input: "2 / (5 + 5)",
+                expected: "(2 / (5 + 5));",
+            },
+            InputAndExpected {
+                input: "-(5 + 5)",
+                expected: "(-(5 + 5));",
+            },
+            InputAndExpected {
+                input: "!(true == true)",
+                expected: "(!(true == true));",
             },
         ];
 
