@@ -1,7 +1,7 @@
 use crate::ast::{
-    BlockStatement, ConditionalExpression, Expression, ExpressionOperator, Identifier,
-    InfixOperationExpression, LetStatement, Precedence, PrefixOperationExpression, Program,
-    ReturnStatement, Statement,
+    BlockStatement, ConditionalExpression, Expression, ExpressionOperator, FunctionExpression,
+    Identifier, InfixOperationExpression, LetStatement, Precedence, PrefixOperationExpression,
+    Program, ReturnStatement, Statement,
 };
 use crate::lexer::Lexer;
 use crate::token::Token;
@@ -53,6 +53,7 @@ impl<'a> Parser<'a> {
             Token::Minus | Token::Bang => self.parse_prefix_expression(),
             Token::OpeningParenthesis => self.parse_grouped_expression(),
             Token::If => self.parse_if_expression(),
+            Token::Function => self.parse_function_expression(),
             token => Err(format!("cannot parse token {:?} as prefix", token)),
         }
     }
@@ -223,6 +224,63 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_function_expression(&mut self) -> Result<Expression, String> {
+        self.next_token();
+
+        Self::expect_token_or_error(&self.current_token, Token::OpeningParenthesis)?;
+
+        self.next_token();
+
+        let parameters = self.parse_function_expression_parameters()?;
+
+        self.next_token();
+
+        Self::expect_token_or_error(&self.current_token, Token::OpeningBrace)?;
+
+        let body = self.parse_block_statement()?;
+
+        Self::expect_token_or_error(&self.current_token, Token::ClosingBrace)?;
+
+        self.next_token();
+
+        Ok(Expression::Function(FunctionExpression::new(
+            parameters, body,
+        )))
+    }
+
+    fn parse_function_expression_parameters(&mut self) -> Result<Vec<Identifier>, String> {
+        let mut identifiers = Vec::new();
+
+        match Self::get_token_or_error(&self.current_token)? {
+            Token::ClosingParenthesis => return Ok(identifiers),
+            Token::Identifier(literal) => identifiers.push(Identifier::new(literal.clone())),
+            illegal_token => return Err(format!("expected identifier, got {:?}", illegal_token)),
+        }
+
+        self.next_token();
+
+        loop {
+            if self.current_token != Some(Token::Comma) {
+                break;
+            }
+
+            self.next_token();
+
+            match Self::get_token_or_error(&self.current_token)? {
+                Token::Identifier(literal) => identifiers.push(Identifier::new(literal.clone())),
+                illegal_token => {
+                    return Err(format!("expected identifier, got {:?}", illegal_token))
+                }
+            }
+
+            self.next_token();
+        }
+
+        Self::expect_token_or_error(&self.current_token, Token::ClosingParenthesis)?;
+
+        Ok(identifiers)
+    }
+
     fn parse_if_expression(&mut self) -> Result<Expression, String> {
         self.next_token();
 
@@ -287,6 +345,10 @@ impl<'a> Parser<'a> {
 
             let statement = self.parse_statement()?;
 
+            if self.current_token == Some(Token::Semicolon) {
+                self.next_token();
+            }
+
             statements.push(statement);
         }
 
@@ -340,9 +402,9 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use crate::ast::{
-        BlockStatement, ConditionalExpression, Expression, ExpressionOperator, Identifier,
-        InfixOperationExpression, LetStatement, PrefixOperationExpression, ReturnStatement,
-        Statement,
+        BlockStatement, ConditionalExpression, Expression, ExpressionOperator, FunctionExpression,
+        Identifier, InfixOperationExpression, LetStatement, PrefixOperationExpression,
+        ReturnStatement, Statement,
     };
     use crate::lexer::Lexer;
     use crate::token::Literal;
@@ -721,5 +783,75 @@ mod tests {
         ))];
 
         assert_eq!(program.statements, expected_statements);
+    }
+
+    #[test]
+    fn function_expression() {
+        let input = "fungsi (x, y) { x + y; }";
+
+        let program = parse(input).unwrap();
+
+        let expected_statements = vec![Statement::Expression(Expression::Function(
+            FunctionExpression::new(
+                vec![
+                    Identifier::new(Literal("x".to_string())),
+                    Identifier::new(Literal("y".to_string())),
+                ],
+                BlockStatement::new(vec![Statement::Expression(Expression::InfixOperation(
+                    InfixOperationExpression::new(
+                        ExpressionOperator::Plus,
+                        Expression::Identifier(Identifier::new(Literal("x".to_string()))),
+                        Expression::Identifier(Identifier::new(Literal("y".to_string()))),
+                    ),
+                ))]),
+            ),
+        ))];
+
+        assert_eq!(program.statements, expected_statements);
+    }
+
+    #[test]
+    fn function_parameters() {
+        struct InputAndExpected {
+            input: &'static str,
+            expected: Vec<Statement>,
+        }
+
+        let input = vec![
+            InputAndExpected {
+                input: "fungsi() {};",
+                expected: vec![Statement::Expression(Expression::Function(
+                    FunctionExpression::new(vec![], BlockStatement::new(vec![])),
+                ))],
+            },
+            InputAndExpected {
+                input: "fungsi(x) {};",
+                expected: vec![Statement::Expression(Expression::Function(
+                    FunctionExpression::new(
+                        vec![Identifier::new(Literal("x".to_string()))],
+                        BlockStatement::new(vec![]),
+                    ),
+                ))],
+            },
+            InputAndExpected {
+                input: "fungsi(x, y, z) {};",
+                expected: vec![Statement::Expression(Expression::Function(
+                    FunctionExpression::new(
+                        vec![
+                            Identifier::new(Literal("x".to_string())),
+                            Identifier::new(Literal("y".to_string())),
+                            Identifier::new(Literal("z".to_string())),
+                        ],
+                        BlockStatement::new(vec![]),
+                    ),
+                ))],
+            },
+        ];
+
+        for input_and_expected in input {
+            let program = parse(input_and_expected.input).unwrap();
+
+            assert_eq!(program.statements, input_and_expected.expected);
+        }
     }
 }

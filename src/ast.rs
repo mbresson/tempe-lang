@@ -62,6 +62,7 @@ pub enum Expression {
     PrefixOperation(PrefixOperationExpression),
     InfixOperation(InfixOperationExpression),
     Conditional(ConditionalExpression),
+    Function(FunctionExpression),
 }
 
 impl fmt::Display for Expression {
@@ -74,6 +75,7 @@ impl fmt::Display for Expression {
             Self::InfixOperation(expression) => write!(f, "{}", expression),
             Self::Identifier(identifier) => write!(f, "{}", identifier),
             Self::Conditional(conditional) => write!(f, "{}", conditional),
+            Self::Function(function) => write!(f, "{}", function),
         }
     }
 }
@@ -187,7 +189,7 @@ impl fmt::Display for ConditionalExpression {
                 let ifnot = format!("{} {}", keywords::IF, keywords::NOT);
                 write!(
                     f,
-                    "{}({})\n{}\n{} \n{}",
+                    "{}({}) {{\n{}\n}} {} {{\n{}\n}}",
                     keywords::IF,
                     self.condition,
                     self.consequence,
@@ -197,12 +199,36 @@ impl fmt::Display for ConditionalExpression {
             }
             None => write!(
                 f,
-                "{}({})\n{}",
+                "{}({}) {{\n{}\n}}",
                 keywords::IF,
                 self.condition,
                 self.consequence
             ),
         }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct FunctionExpression {
+    parameters: Vec<Identifier>,
+    body: BlockStatement,
+}
+
+impl FunctionExpression {
+    pub fn new(parameters: Vec<Identifier>, body: BlockStatement) -> Self {
+        Self { parameters, body }
+    }
+}
+
+impl fmt::Display for FunctionExpression {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}({}) {{\n{}\n}}",
+            keywords::FUNCTION,
+            self.parameters.iter().format(", "),
+            self.body,
+        )
     }
 }
 
