@@ -1,6 +1,7 @@
 use crate::ast::{
-    Expression, ExpressionOperator, Identifier, InfixOperationExpression, LetStatement, Precedence,
-    PrefixOperationExpression, Program, ReturnStatement, Statement,
+    BlockStatement, ConditionalExpression, Expression, ExpressionOperator, Identifier,
+    InfixOperationExpression, LetStatement, Precedence, PrefixOperationExpression, Program,
+    ReturnStatement, Statement,
 };
 use crate::lexer::Lexer;
 use crate::token::Token;
@@ -51,6 +52,7 @@ impl<'a> Parser<'a> {
             Token::False => Ok(Expression::Boolean(false)),
             Token::Minus | Token::Bang => self.parse_prefix_expression(),
             Token::OpeningParenthesis => self.parse_grouped_expression(),
+            Token::If => self.parse_if_expression(),
             token => Err(format!("cannot parse token {:?} as prefix", token)),
         }
     }
@@ -60,18 +62,20 @@ impl<'a> Parser<'a> {
         self.peek_token = self.lexer.next();
     }
 
+    fn parse_statement(&mut self) -> Result<Statement, String> {
+        match Self::get_token_or_error(&self.current_token)? {
+            Token::Let => self.parse_let_statement(),
+            Token::Return => self.parse_return_statement(),
+            _ => self.parse_expression_statement(),
+        }
+    }
+
     pub fn parse_program(&mut self) -> Result<Program, Vec<String>> {
         let mut statements = Vec::new();
         let mut errors = Vec::new();
 
-        'statements_parsing_loop: while let Some(token) = &self.current_token {
-            let parsed_statement = match token {
-                Token::Let => self.parse_let_statement(),
-                Token::Return => self.parse_return_statement(),
-                _ => self.parse_expression_statement(),
-            };
-
-            let statement = match parsed_statement {
+        'statements_parsing_loop: while self.current_token.is_some() {
+            let statement = match self.parse_statement() {
                 Err(parsing_error) => {
                     errors.push(parsing_error);
                     self.jump_to_next_statement();
@@ -198,13 +202,11 @@ impl<'a> Parser<'a> {
 
         let expression = self.parse_expression(Precedence::Lowest);
 
-        match Self::get_token_or_error(&self.peek_token)? {
-            Token::ClosingParenthesis => {
-                self.next_token();
-                expression
-            },
-            token => Err(format!("expected closing parenthesis, got {:?}", token)),
-        }
+        Self::expect_token_or_error(&self.peek_token, Token::ClosingParenthesis)?;
+
+        self.next_token();
+
+        expression
     }
 
     fn token_to_infix_operator(token: &Token) -> Option<ExpressionOperator> {
@@ -219,6 +221,76 @@ impl<'a> Parser<'a> {
             Token::GreaterThan => Some(ExpressionOperator::GreaterThan),
             _ => None,
         }
+    }
+
+    fn parse_if_expression(&mut self) -> Result<Expression, String> {
+        self.next_token();
+
+        Self::expect_token_or_error(&self.current_token, Token::OpeningParenthesis)?;
+
+        self.next_token();
+
+        let condition = self.parse_expression(Precedence::Lowest)?;
+
+        self.next_token();
+
+        Self::expect_token_or_error(&self.current_token, Token::ClosingParenthesis)?;
+
+        self.next_token();
+
+        Self::expect_token_or_error(&self.current_token, Token::OpeningBrace)?;
+
+        let consequence = self.parse_block_statement()?;
+
+        Self::expect_token_or_error(&self.current_token, Token::ClosingBrace)?;
+
+        self.next_token();
+
+        // in Indonesian, "else" is translated by a group of 2 words: "jika tidak" (literally "if not")
+        // so we must check the current token (if) + the following token (not) to detect "else"
+        let is_else_expression =
+            self.current_token == Some(Token::If) && self.peek_token == Some(Token::Not);
+        let alternative = if is_else_expression {
+            // skip the "if not" a.k.a. "else" tokens
+            self.next_token();
+            self.next_token();
+
+            Self::expect_token_or_error(&self.current_token, Token::OpeningBrace)?;
+
+            let alternative_consequence = self.parse_block_statement()?;
+
+            Self::expect_token_or_error(&self.current_token, Token::ClosingBrace)?;
+
+            self.next_token();
+
+            Some(alternative_consequence)
+        } else {
+            None
+        };
+
+        Ok(Expression::Conditional(ConditionalExpression::new(
+            condition,
+            consequence,
+            alternative,
+        )))
+    }
+
+    fn parse_block_statement(&mut self) -> Result<BlockStatement, String> {
+        let mut statements = Vec::new();
+
+        self.next_token();
+
+        while let Some(token) = &self.current_token {
+            if *token == Token::ClosingBrace {
+                break;
+            }
+
+            let statement = self.parse_statement()?;
+
+            statements.push(statement);
+        }
+
+        Ok(BlockStatement::new(statements))
     }
 
     fn parse_infix_expression(
@@ -241,6 +313,22 @@ impl<'a> Parser<'a> {
         )))
     }
 
+    fn expect_token_or_error(
+        tentative_token: &Option<Token>,
+        expected_token: Token,
+    ) -> Result<(), String> {
+        let token = Self::get_token_or_error(tentative_token)?;
+
+        if *token != expected_token {
+            Err(format!(
+                "expected token {:?}, got {:?}",
+                expected_token, token
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
     fn get_token_or_error(tentative_token: &Option<Token>) -> Result<&Token, String> {
         match tentative_token {
             Some(token) => Ok(token),
@@ -252,8 +340,9 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use crate::ast::{
-        Expression, ExpressionOperator, Identifier, InfixOperationExpression, LetStatement,
-        PrefixOperationExpression, ReturnStatement, Statement,
+        BlockStatement, ConditionalExpression, Expression, ExpressionOperator, Identifier,
+        InfixOperationExpression, LetStatement, PrefixOperationExpression, ReturnStatement,
+        Statement,
     };
     use crate::lexer::Lexer;
     use crate::token::Literal;
@@ -584,5 +673,53 @@ mod tests {
 
             assert_eq!(format!("{}", program), input_and_expected.expected);
         }
+    }
+
+    #[test]
+    fn if_expression() {
+        let input = "jika (x < y) { x }";
+
+        let program = parse(input).unwrap();
+
+        let expected_statements = vec![Statement::Expression(Expression::Conditional(
+            ConditionalExpression::new(
+                Expression::InfixOperation(InfixOperationExpression::new(
+                    ExpressionOperator::LessThan,
+                    Expression::Identifier(Identifier::new(Literal("x".to_string()))),
+                    Expression::Identifier(Identifier::new(Literal("y".to_string()))),
+                )),
+                BlockStatement::new(vec![Statement::Expression(Expression::Identifier(
+                    Identifier::new(Literal("x".to_string())),
+                ))]),
+                None,
+            ),
+        ))];
+
+        assert_eq!(program.statements, expected_statements);
+    }
+
+    #[test]
+    fn if_else_expression() {
+        let input = "jika (x < y) { x } jika tidak { y }";
+
+        let program = parse(input).unwrap();
+
+        let expected_statements = vec![Statement::Expression(Expression::Conditional(
+            ConditionalExpression::new(
+                Expression::InfixOperation(InfixOperationExpression::new(
+                    ExpressionOperator::LessThan,
+                    Expression::Identifier(Identifier::new(Literal("x".to_string()))),
+                    Expression::Identifier(Identifier::new(Literal("y".to_string()))),
+                )),
+                BlockStatement::new(vec![Statement::Expression(Expression::Identifier(
+                    Identifier::new(Literal("x".to_string())),
+                ))]),
+                Some(BlockStatement::new(vec![Statement::Expression(
+                    Expression::Identifier(Identifier::new(Literal("y".to_string()))),
+                )])),
+            ),
+        ))];
+
+        assert_eq!(program.statements, expected_statements);
     }
 }

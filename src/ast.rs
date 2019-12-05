@@ -20,13 +20,11 @@ impl From<&ExpressionOperator> for Precedence {
             ExpressionOperator::Plus | ExpressionOperator::Minus => Precedence::Sum,
             ExpressionOperator::Divide | ExpressionOperator::Multiply => Precedence::Product,
             ExpressionOperator::Equal | ExpressionOperator::NotEqual => Precedence::Equals,
-            ExpressionOperator::GreaterThan | ExpressionOperator::LessThan => Precedence::LessOrGreater,
+            ExpressionOperator::GreaterThan | ExpressionOperator::LessThan => {
+                Precedence::LessOrGreater
+            }
         }
     }
-}
-
-trait Node: fmt::Display + fmt::Debug + PartialEq {
-    fn token_literal(&self) -> &Literal;
 }
 
 pub struct Program {
@@ -56,12 +54,6 @@ impl fmt::Display for Identifier {
     }
 }
 
-impl Node for Identifier {
-    fn token_literal(&self) -> &Literal {
-        &self.value
-    }
-}
-
 #[derive(Debug, PartialEq)]
 pub enum Expression {
     Identifier(Identifier),
@@ -69,6 +61,7 @@ pub enum Expression {
     Boolean(bool),
     PrefixOperation(PrefixOperationExpression),
     InfixOperation(InfixOperationExpression),
+    Conditional(ConditionalExpression),
 }
 
 impl fmt::Display for Expression {
@@ -80,6 +73,7 @@ impl fmt::Display for Expression {
             Self::PrefixOperation(expression) => write!(f, "{}", expression),
             Self::InfixOperation(expression) => write!(f, "{}", expression),
             Self::Identifier(identifier) => write!(f, "{}", identifier),
+            Self::Conditional(conditional) => write!(f, "{}", conditional),
         }
     }
 }
@@ -121,7 +115,7 @@ pub struct PrefixOperationExpression {
 
 impl PrefixOperationExpression {
     pub fn new(prefix_operator: ExpressionOperator, right_expression: Expression) -> Self {
-        PrefixOperationExpression {
+        Self {
             prefix_operator,
             right_expression: Box::new(right_expression),
         }
@@ -142,8 +136,12 @@ pub struct InfixOperationExpression {
 }
 
 impl InfixOperationExpression {
-    pub fn new(infix_operator: ExpressionOperator, left_expression: Expression, right_expression: Expression) -> Self {
-        InfixOperationExpression {
+    pub fn new(
+        infix_operator: ExpressionOperator,
+        left_expression: Expression,
+        right_expression: Expression,
+    ) -> Self {
+        Self {
             infix_operator,
             left_expression: Box::new(left_expression),
             right_expression: Box::new(right_expression),
@@ -153,7 +151,58 @@ impl InfixOperationExpression {
 
 impl fmt::Display for InfixOperationExpression {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({} {} {})", self.left_expression, self.infix_operator, self.right_expression)
+        write!(
+            f,
+            "({} {} {})",
+            self.left_expression, self.infix_operator, self.right_expression
+        )
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConditionalExpression {
+    condition: Box<Expression>,
+    consequence: BlockStatement,
+    alternative: Option<BlockStatement>,
+}
+
+impl ConditionalExpression {
+    pub fn new(
+        condition: Expression,
+        consequence: BlockStatement,
+        alternative: Option<BlockStatement>,
+    ) -> Self {
+        Self {
+            condition: Box::new(condition),
+            consequence,
+            alternative,
+        }
+    }
+}
+
+impl fmt::Display for ConditionalExpression {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.alternative {
+            Some(alternative) => {
+                let ifnot = format!("{} {}", keywords::IF, keywords::NOT);
+                write!(
+                    f,
+                    "{}({})\n{}\n{} \n{}",
+                    keywords::IF,
+                    self.condition,
+                    self.consequence,
+                    ifnot,
+                    alternative
+                )
+            }
+            None => write!(
+                f,
+                "{}({})\n{}",
+                keywords::IF,
+                self.condition,
+                self.consequence
+            ),
+        }
     }
 }
 
@@ -176,57 +225,53 @@ impl fmt::Display for Statement {
 
 #[derive(Debug, PartialEq)]
 pub struct LetStatement {
-    token_literal: Literal,
     name: Identifier,
     value: Expression,
 }
 
 impl LetStatement {
-    pub fn new(name: Identifier, value: Expression) -> LetStatement {
-        LetStatement {
-            token_literal: Literal(keywords::LET.to_string()),
-            name,
-            value,
-        }
+    pub fn new(name: Identifier, value: Expression) -> Self {
+        Self { name, value }
     }
 }
 
 impl fmt::Display for LetStatement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {} = {}", self.token_literal, self.name, self.value)
-    }
-}
-
-impl Node for LetStatement {
-    fn token_literal(&self) -> &Literal {
-        &self.token_literal
+        write!(f, "{} {} = {}", keywords::LET, self.name, self.value)
     }
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ReturnStatement {
-    token_literal: Literal,
     value: Expression,
 }
 
 impl ReturnStatement {
-    pub fn new(value: Expression) -> ReturnStatement {
-        ReturnStatement {
-            token_literal: Literal(keywords::RETURN.to_string()),
-            value,
-        }
+    pub fn new(value: Expression) -> Self {
+        Self { value }
     }
 }
 
 impl fmt::Display for ReturnStatement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {}", self.token_literal, self.value)
+        write!(f, "{} {}", keywords::RETURN, self.value)
     }
 }
 
-impl Node for ReturnStatement {
-    fn token_literal(&self) -> &Literal {
-        &self.token_literal
+#[derive(Debug, PartialEq)]
+pub struct BlockStatement {
+    statements: Vec<Statement>,
+}
+
+impl BlockStatement {
+    pub fn new(statements: Vec<Statement>) -> Self {
+        Self { statements }
+    }
+}
+
+impl fmt::Display for BlockStatement {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{{\n{};\n}}", self.statements.iter().format(";\n"))
     }
 }
 
