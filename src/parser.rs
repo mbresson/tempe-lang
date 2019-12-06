@@ -3,21 +3,20 @@ use crate::ast::{
     Identifier, InfixOperationExpression, LetStatement, Precedence, PrefixOperationExpression,
     Program, ReturnStatement, Statement,
 };
-use crate::lexer::Lexer;
 use crate::token::Token;
 use std::vec::Vec;
 
 pub struct Parser<'a> {
-    lexer: Lexer<'a>,
+    token_iterator: &'a mut dyn Iterator<Item = Token>,
 
     current_token: Option<Token>,
     peek_token: Option<Token>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(lexer: Lexer<'a>) -> Self {
+    pub fn new(token_iterator: &'a mut dyn Iterator<Item = Token>) -> Self {
         let mut parser = Parser {
-            lexer,
+            token_iterator,
             current_token: None,
             peek_token: None,
         };
@@ -60,7 +59,7 @@ impl<'a> Parser<'a> {
 
     fn next_token(&mut self) {
         self.current_token = self.peek_token.take();
-        self.peek_token = self.lexer.next();
+        self.peek_token = self.token_iterator.next();
     }
 
     fn parse_statement(&mut self) -> Result<Statement, String> {
@@ -410,7 +409,9 @@ mod tests {
     use crate::token::Literal;
 
     fn parse(input: &str) -> Result<super::Program, String> {
-        super::Parser::new(Lexer::new(input))
+        let mut lexer = Lexer::new(input);
+        
+        super::Parser::new(&mut lexer)
             .parse_program()
             .map_err(|errors| format!("parse_program returned errors {:?}", errors))
     }

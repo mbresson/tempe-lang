@@ -19,7 +19,7 @@ fn main() {
     // TMP inserted here only to silence warnings of unused Parser and Parser methods,
     // as the parser is not ready yet to be used
     let _ = crate::parser::Parser::new(
-        crate::lexer::Lexer::new("blabla")
+        &mut crate::lexer::Lexer::new("blabla")
     ).parse_program();
 
     repl::start(
