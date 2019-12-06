@@ -1,7 +1,7 @@
 use crate::ast::{
-    BlockStatement, ConditionalExpression, Expression, ExpressionOperator, FunctionExpression,
-    Identifier, InfixOperationExpression, LetStatement, Precedence, PrefixOperationExpression,
-    Program, ReturnStatement, Statement,
+    BlockStatement, ConditionalExpression, Expression, ExpressionOperator, FunctionCallExpression,
+    FunctionExpression, Identifier, InfixOperationExpression, LetStatement, Precedence,
+    PrefixOperationExpression, Program, ReturnStatement, Statement,
 };
 use crate::token::Token;
 use std::vec::Vec;
@@ -37,6 +37,7 @@ impl<'a> Parser<'a> {
             | Token::NotEqual
             | Token::LessThan
             | Token::GreaterThan => self.parse_infix_expression(left_expression),
+            Token::OpeningParenthesis => self.parse_function_call_expression(left_expression),
             token => Err(format!("expected infix operator, got {:?}", token)),
         }
     }
@@ -161,14 +162,11 @@ impl<'a> Parser<'a> {
         let mut left_expression = self.parse_prefix()?;
 
         'parsing_expression: while let Some(following_token) = &self.peek_token {
-            let following_operator =
-                if let Some(operator) = Self::token_to_infix_operator(&following_token) {
-                    operator
-                } else {
+            if let Some(operator) = Self::token_to_infix_operator(&following_token) {
+                if Precedence::from(&operator) <= precedence {
                     break 'parsing_expression;
-                };
-
-            if Precedence::from(&following_operator) <= precedence {
+                }
+            } else if *following_token != Token::OpeningParenthesis {
                 break 'parsing_expression;
             }
 
@@ -245,6 +243,47 @@ impl<'a> Parser<'a> {
         Ok(Expression::Function(FunctionExpression::new(
             parameters, body,
         )))
+    }
+
+    fn parse_function_call_expression(
+        &mut self,
+        function_expression: Expression,
+    ) -> Result<Expression, String> {
+        self.next_token();
+
+        let arguments = self.parse_function_call_arguments()?;
+
+        Ok(Expression::FunctionCall(FunctionCallExpression::new(
+            function_expression,
+            arguments,
+        )))
+    }
+
+    fn parse_function_call_arguments(&mut self) -> Result<Vec<Expression>, String> {
+        let mut arguments = Vec::new();
+
+        match Self::get_token_or_error(&self.current_token)? {
+            Token::ClosingParenthesis => return Ok(arguments),
+            _ => arguments.push(self.parse_expression(Precedence::Lowest)?),
+        }
+
+        self.next_token();
+
+        loop {
+            if self.current_token != Some(Token::Comma) {
+                break;
+            }
+
+            self.next_token();
+
+            arguments.push(self.parse_expression(Precedence::Lowest)?);
+
+            self.next_token();
+        }
+
+        Self::expect_token_or_error(&self.current_token, Token::ClosingParenthesis)?;
+
+        Ok(arguments)
     }
 
     fn parse_function_expression_parameters(&mut self) -> Result<Vec<Identifier>, String> {
@@ -401,16 +440,16 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use crate::ast::{
-        BlockStatement, ConditionalExpression, Expression, ExpressionOperator, FunctionExpression,
-        Identifier, InfixOperationExpression, LetStatement, PrefixOperationExpression,
-        ReturnStatement, Statement,
+        BlockStatement, ConditionalExpression, Expression, ExpressionOperator,
+        FunctionCallExpression, FunctionExpression, Identifier, InfixOperationExpression,
+        LetStatement, PrefixOperationExpression, ReturnStatement, Statement,
     };
     use crate::lexer::Lexer;
     use crate::token::Literal;
 
     fn parse(input: &str) -> Result<super::Program, String> {
         let mut lexer = Lexer::new(input);
-        
+
         super::Parser::new(&mut lexer)
             .parse_program()
             .map_err(|errors| format!("parse_program returned errors {:?}", errors))
@@ -729,6 +768,18 @@ mod tests {
                 input: "!(true == true)",
                 expected: "(!(true == true));",
             },
+            InputAndExpected {
+                input: "a + add(b * c) + d",
+                expected: "((a + add((b * c))) + d);",
+            },
+            InputAndExpected {
+                input: "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))",
+                expected: "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)));",
+            },
+            InputAndExpected {
+                input: "add(a + b + c * d / f + g)",
+                expected: "add((((a + b) + ((c * d) / f)) + g));",
+            },
         ];
 
         for input_and_expected in input {
@@ -854,5 +905,33 @@ mod tests {
 
             assert_eq!(program.statements, input_and_expected.expected);
         }
+    }
+
+    #[test]
+    fn function_call_expression() {
+        let input = "add(1, 2 * 3, 4 + 5); ";
+
+        let program = parse(input).unwrap();
+
+        let expected_statements = vec![Statement::Expression(Expression::FunctionCall(
+            FunctionCallExpression::new(
+                Expression::Identifier(Identifier::new(Literal("add".to_string()))),
+                vec![
+                    Expression::Integer(1),
+                    Expression::InfixOperation(InfixOperationExpression::new(
+                        ExpressionOperator::Multiply,
+                        Expression::Integer(2),
+                        Expression::Integer(3),
+                    )),
+                    Expression::InfixOperation(InfixOperationExpression::new(
+                        ExpressionOperator::Plus,
+                        Expression::Integer(4),
+                        Expression::Integer(5),
+                    )),
+                ],
+            ),
+        ))];
+
+        assert_eq!(program.statements, expected_statements);
     }
 }

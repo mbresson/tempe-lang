@@ -10,7 +10,6 @@ pub enum Precedence {
     Sum,
     Product,
     Prefix,
-    Call, // function calls have the highest precedence
 }
 
 impl From<&ExpressionOperator> for Precedence {
@@ -22,7 +21,7 @@ impl From<&ExpressionOperator> for Precedence {
             ExpressionOperator::Equal | ExpressionOperator::NotEqual => Precedence::Equals,
             ExpressionOperator::GreaterThan | ExpressionOperator::LessThan => {
                 Precedence::LessOrGreater
-            }
+            },
         }
     }
 }
@@ -63,6 +62,7 @@ pub enum Expression {
     InfixOperation(InfixOperationExpression),
     Conditional(ConditionalExpression),
     Function(FunctionExpression),
+    FunctionCall(FunctionCallExpression),
 }
 
 impl fmt::Display for Expression {
@@ -76,6 +76,7 @@ impl fmt::Display for Expression {
             Self::Identifier(identifier) => write!(f, "{}", identifier),
             Self::Conditional(conditional) => write!(f, "{}", conditional),
             Self::Function(function) => write!(f, "{}", function),
+            Self::FunctionCall(function_call) => write!(f, "{}", function_call),
         }
     }
 }
@@ -228,6 +229,32 @@ impl fmt::Display for FunctionExpression {
             keywords::FUNCTION,
             self.parameters.iter().format(", "),
             self.body,
+        )
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct FunctionCallExpression {
+    function: Box<Expression>,
+    arguments: Vec<Expression>,
+}
+
+impl FunctionCallExpression {
+    pub fn new(function: Expression, arguments: Vec<Expression>) -> Self {
+        Self {
+            function: Box::new(function),
+            arguments,
+        }
+    }
+}
+
+impl fmt::Display for FunctionCallExpression {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}({})",
+            self.function,
+            self.arguments.iter().format(", "),
         )
     }
 }
