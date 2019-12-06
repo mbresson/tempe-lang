@@ -461,6 +461,8 @@ mod tests {
             diketahui x = 5;
             diketahui y = 10;
             diketahui foobar = 838383;
+            diketahui z = benar;
+            diketahui foobar_bar = foobar;
         ";
 
         let program = parse(input).unwrap();
@@ -478,6 +480,14 @@ mod tests {
                 Identifier::new(Literal("foobar".to_string())),
                 Expression::Integer(838_383),
             )),
+            Statement::Let(LetStatement::new(
+                Identifier::new(Literal("z".to_string())),
+                Expression::Boolean(true),
+            )),
+            Statement::Let(LetStatement::new(
+                Identifier::new(Literal("foobar_bar".to_string())),
+                Expression::Identifier(Identifier::new(Literal("foobar".to_string()))),
+            )),
         ];
 
         for (statement_index, expected_statement) in expected_statements.iter().enumerate() {
@@ -493,6 +503,8 @@ mod tests {
             kembalikan 5;
             kembalikan 10;
             kembalikan 993322;
+            kembalikan salah;
+            kembalikan 3*2;
         ";
 
         let program = parse(input).unwrap();
@@ -501,6 +513,14 @@ mod tests {
             Statement::Return(ReturnStatement::new(Expression::Integer(5))),
             Statement::Return(ReturnStatement::new(Expression::Integer(10))),
             Statement::Return(ReturnStatement::new(Expression::Integer(993_322))),
+            Statement::Return(ReturnStatement::new(Expression::Boolean(false))),
+            Statement::Return(ReturnStatement::new(Expression::InfixOperation(
+                InfixOperationExpression::new(
+                    ExpressionOperator::Multiply,
+                    Expression::Integer(3),
+                    Expression::Integer(2),
+                ),
+            ))),
         ];
 
         for (statement_index, expected_statement) in expected_statements.iter().enumerate() {
