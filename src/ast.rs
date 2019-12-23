@@ -21,7 +21,7 @@ impl From<&ExpressionOperator> for Precedence {
             ExpressionOperator::Equal | ExpressionOperator::NotEqual => Precedence::Equals,
             ExpressionOperator::GreaterThan | ExpressionOperator::LessThan => {
                 Precedence::LessOrGreater
-            },
+            }
         }
     }
 }
