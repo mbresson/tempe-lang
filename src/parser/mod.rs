@@ -6,6 +6,9 @@ use crate::ast::{
 use crate::token::Token;
 use std::vec::Vec;
 
+mod errors;
+use errors::{Error, ErrorKind, Result as ParsingResult};
+
 pub struct Parser<'a> {
     token_iterator: &'a mut dyn Iterator<Item = Token>,
 
@@ -27,7 +30,7 @@ impl<'a> Parser<'a> {
         parser
     }
 
-    fn parse_infix(&mut self, left_expression: Expression) -> Result<Expression, String> {
+    fn parse_infix(&mut self, left_expression: Expression) -> ParsingResult<Expression> {
         match Self::get_token_or_error(&self.current_token)? {
             Token::Plus
             | Token::Minus
@@ -38,11 +41,11 @@ impl<'a> Parser<'a> {
             | Token::LessThan
             | Token::GreaterThan => self.parse_infix_expression(left_expression),
             Token::OpeningParenthesis => self.parse_function_call_expression(left_expression),
-            token => Err(format!("expected infix operator, got {:?}", token)),
+            token => Err(ErrorKind::ExpectedInfixOperator(token.clone()).into()),
         }
     }
 
-    fn parse_prefix(&mut self) -> Result<Expression, String> {
+    fn parse_prefix(&mut self) -> ParsingResult<Expression> {
         match Self::get_token_or_error(&self.current_token)? {
             Token::Identifier(literal) => {
                 Ok(Expression::Identifier(Identifier::new(literal.clone())))
@@ -54,7 +57,7 @@ impl<'a> Parser<'a> {
             Token::OpeningParenthesis => self.parse_grouped_expression(),
             Token::If => self.parse_if_expression(),
             Token::Function => self.parse_function_expression(),
-            token => Err(format!("cannot parse token {:?} as prefix", token)),
+            token => Err(ErrorKind::CannotParseTokenAsPrefix(token.clone()).into()),
         }
     }
 
@@ -63,7 +66,7 @@ impl<'a> Parser<'a> {
         self.peek_token = self.token_iterator.next();
     }
 
-    fn parse_statement(&mut self) -> Result<Statement, String> {
+    fn parse_statement(&mut self) -> ParsingResult<Statement> {
         match Self::get_token_or_error(&self.current_token)? {
             Token::Let => self.parse_let_statement(),
             Token::Return => self.parse_return_statement(),
@@ -71,7 +74,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_program(&mut self) -> Result<Program, Vec<String>> {
+    pub fn parse_program(&mut self) -> Result<Program, Vec<Error>> {
         let mut statements = Vec::new();
         let mut errors = Vec::new();
 
@@ -97,7 +100,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expression_statement(&mut self) -> Result<Statement, String> {
+    fn parse_expression_statement(&mut self) -> ParsingResult<Statement> {
         let expression = self.parse_expression(Precedence::Lowest);
 
         self.next_token();
@@ -116,7 +119,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_return_statement(&mut self) -> Result<Statement, String> {
+    fn parse_return_statement(&mut self) -> ParsingResult<Statement> {
         self.next_token();
 
         let value = self.parse_expression(Precedence::Lowest)?;
@@ -126,13 +129,13 @@ impl<'a> Parser<'a> {
         Ok(Statement::Return(ReturnStatement::new(value)))
     }
 
-    fn parse_let_statement(&mut self) -> Result<Statement, String> {
+    fn parse_let_statement(&mut self) -> ParsingResult<Statement> {
         self.next_token();
 
         let identifier = match Self::get_token_or_error(&self.current_token)? {
             Token::Identifier(literal) => Identifier::new(literal.clone()),
             token => {
-                return Err(format!("expected identifier, got {:?}", token));
+                return Err(ErrorKind::ExpectedIdentifier(token.clone()).into());
             }
         };
 
@@ -141,11 +144,9 @@ impl<'a> Parser<'a> {
         match Self::get_token_or_error(&self.current_token.clone())? {
             Token::Assign => {}
             illegal_token => {
-                return Err(format!(
-                    "expected {:?}, found {:?}",
-                    Token::Assign,
-                    illegal_token
-                ));
+                return Err(
+                    ErrorKind::ExpectedSpecificToken(Token::Assign, illegal_token.clone()).into(),
+                );
             }
         };
 
@@ -158,7 +159,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Let(LetStatement::new(identifier, value)))
     }
 
-    fn parse_expression(&mut self, precedence: Precedence) -> Result<Expression, String> {
+    fn parse_expression(&mut self, precedence: Precedence) -> ParsingResult<Expression> {
         let mut left_expression = self.parse_prefix()?;
 
         'parsing_expression: while let Some(following_token) = &self.peek_token {
@@ -178,12 +179,12 @@ impl<'a> Parser<'a> {
         Ok(left_expression)
     }
 
-    fn parse_prefix_expression(&mut self) -> Result<Expression, String> {
+    fn parse_prefix_expression(&mut self) -> ParsingResult<Expression> {
         let operator = match Self::get_token_or_error(&self.current_token)? {
             Token::Bang => ExpressionOperator::Bang,
             Token::Minus => ExpressionOperator::Minus,
             token => {
-                return Err(format!("expected prefix operator, got {:?}", token));
+                return Err(ErrorKind::ExpectedPrefixOperator(token.clone()).into());
             }
         };
 
@@ -195,7 +196,7 @@ impl<'a> Parser<'a> {
         )))
     }
 
-    fn parse_grouped_expression(&mut self) -> Result<Expression, String> {
+    fn parse_grouped_expression(&mut self) -> ParsingResult<Expression> {
         self.next_token();
 
         let expression = self.parse_expression(Precedence::Lowest);
@@ -221,7 +222,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_function_expression(&mut self) -> Result<Expression, String> {
+    fn parse_function_expression(&mut self) -> ParsingResult<Expression> {
         self.next_token();
 
         Self::expect_token_or_error(&self.current_token, Token::OpeningParenthesis)?;
@@ -248,7 +249,7 @@ impl<'a> Parser<'a> {
     fn parse_function_call_expression(
         &mut self,
         function_expression: Expression,
-    ) -> Result<Expression, String> {
+    ) -> ParsingResult<Expression> {
         self.next_token();
 
         let arguments = self.parse_function_call_arguments()?;
@@ -259,7 +260,7 @@ impl<'a> Parser<'a> {
         )))
     }
 
-    fn parse_function_call_arguments(&mut self) -> Result<Vec<Expression>, String> {
+    fn parse_function_call_arguments(&mut self) -> ParsingResult<Vec<Expression>> {
         let mut arguments = Vec::new();
 
         match Self::get_token_or_error(&self.current_token)? {
@@ -286,13 +287,15 @@ impl<'a> Parser<'a> {
         Ok(arguments)
     }
 
-    fn parse_function_expression_parameters(&mut self) -> Result<Vec<Identifier>, String> {
+    fn parse_function_expression_parameters(&mut self) -> ParsingResult<Vec<Identifier>> {
         let mut identifiers = Vec::new();
 
         match Self::get_token_or_error(&self.current_token)? {
             Token::ClosingParenthesis => return Ok(identifiers),
             Token::Identifier(literal) => identifiers.push(Identifier::new(literal.clone())),
-            illegal_token => return Err(format!("expected identifier, got {:?}", illegal_token)),
+            illegal_token => {
+                return Err(ErrorKind::ExpectedIdentifier(illegal_token.clone()).into())
+            }
         }
 
         self.next_token();
@@ -307,7 +310,7 @@ impl<'a> Parser<'a> {
             match Self::get_token_or_error(&self.current_token)? {
                 Token::Identifier(literal) => identifiers.push(Identifier::new(literal.clone())),
                 illegal_token => {
-                    return Err(format!("expected identifier, got {:?}", illegal_token))
+                    return Err(ErrorKind::ExpectedIdentifier(illegal_token.clone()).into())
                 }
             }
 
@@ -319,7 +322,7 @@ impl<'a> Parser<'a> {
         Ok(identifiers)
     }
 
-    fn parse_if_expression(&mut self) -> Result<Expression, String> {
+    fn parse_if_expression(&mut self) -> ParsingResult<Expression> {
         self.next_token();
 
         Self::expect_token_or_error(&self.current_token, Token::OpeningParenthesis)?;
@@ -371,7 +374,7 @@ impl<'a> Parser<'a> {
         )))
     }
 
-    fn parse_block_statement(&mut self) -> Result<BlockStatement, String> {
+    fn parse_block_statement(&mut self) -> ParsingResult<BlockStatement> {
         let mut statements = Vec::new();
 
         self.next_token();
@@ -393,13 +396,12 @@ impl<'a> Parser<'a> {
         Ok(BlockStatement::new(statements))
     }
 
-    fn parse_infix_expression(
-        &mut self,
-        left_expression: Expression,
-    ) -> Result<Expression, String> {
+    fn parse_infix_expression(&mut self, left_expression: Expression) -> ParsingResult<Expression> {
         let operator = Self::get_token_or_error(&self.current_token).and_then(|token| {
-            Self::token_to_infix_operator(&token)
-                .ok_or_else(|| format!("expected infix operator, got {:?}", token))
+            Self::token_to_infix_operator(&token).map_or_else(
+                || Err(ErrorKind::ExpectedInfixOperator(token.clone()).into()),
+                |operator| Ok(operator),
+            )
         })?;
 
         self.next_token();
@@ -416,23 +418,20 @@ impl<'a> Parser<'a> {
     fn expect_token_or_error(
         tentative_token: &Option<Token>,
         expected_token: Token,
-    ) -> Result<(), String> {
+    ) -> ParsingResult<()> {
         let token = Self::get_token_or_error(tentative_token)?;
 
         if *token != expected_token {
-            Err(format!(
-                "expected token {:?}, got {:?}",
-                expected_token, token
-            ))
+            Err(ErrorKind::ExpectedSpecificToken(expected_token, token.clone()).into())
         } else {
             Ok(())
         }
     }
 
-    fn get_token_or_error(tentative_token: &Option<Token>) -> Result<&Token, String> {
+    fn get_token_or_error(tentative_token: &Option<Token>) -> ParsingResult<&Token> {
         match tentative_token {
             Some(token) => Ok(token),
-            None => Err("expected token, got none".to_string()),
+            None => Err(ErrorKind::ExpectedToken.into()),
         }
     }
 }

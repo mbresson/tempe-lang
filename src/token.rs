@@ -1,4 +1,3 @@
-
 use std::fmt;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

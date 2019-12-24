@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 users = "0.9"
 itertools = "0.8"
+error-chain = "0.12"
