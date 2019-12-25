@@ -1,4 +1,4 @@
-use crate::ast::{
+use crate::representations::ast::{
     Expression, ExpressionOperator, InfixOperationExpression, PrefixOperationExpression, Statement,
 };
 use std::fmt;
@@ -133,9 +133,11 @@ pub fn eval_statements(statements: &[Statement]) -> Object {
 #[cfg(test)]
 mod tests {
     use super::{eval_statement, Object};
-    use crate::ast::{Expression, ExpressionOperator, PrefixOperationExpression, Statement};
     use crate::lexer::Lexer;
     use crate::parser::Parser;
+    use crate::representations::ast::{
+        Expression, ExpressionOperator, PrefixOperationExpression, Statement,
+    };
 
     fn parse_eval(input: &str) -> Result<Object, String> {
         let mut lexer = Lexer::new(input);

@@ -1,6 +1,6 @@
 extern crate error_chain;
 
-use crate::token::Token;
+use crate::representations::token::Token;
 use error_chain::error_chain;
 
 error_chain! {

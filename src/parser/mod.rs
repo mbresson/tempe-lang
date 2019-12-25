@@ -1,9 +1,9 @@
-use crate::ast::{
+use crate::representations::ast::{
     BlockStatement, ConditionalExpression, Expression, ExpressionOperator, FunctionCallExpression,
     FunctionExpression, Identifier, InfixOperationExpression, LetStatement, Precedence,
     PrefixOperationExpression, Program, ReturnStatement, Statement,
 };
-use crate::token::Token;
+use crate::representations::token::Token;
 use std::vec::Vec;
 
 mod errors;
@@ -438,13 +438,13 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{
+    use crate::representations::ast::{
         BlockStatement, ConditionalExpression, Expression, ExpressionOperator,
         FunctionCallExpression, FunctionExpression, Identifier, InfixOperationExpression,
         LetStatement, PrefixOperationExpression, ReturnStatement, Statement,
     };
     use crate::lexer::Lexer;
-    use crate::token::Literal;
+    use crate::representations::token::Literal;
 
     fn parse(input: &str) -> Result<super::Program, String> {
         let mut lexer = Lexer::new(input);

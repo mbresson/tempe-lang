@@ -1,7 +1,7 @@
 use std::io::{BufRead, Write};
 use std::process;
 
-use crate::ast::Program;
+use crate::representations::ast::Program;
 use crate::interpreter::eval_statements;
 use crate::lexer::Lexer;
 use crate::parser::Parser;

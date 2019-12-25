@@ -1,9 +1,8 @@
-mod ast;
 mod interpreter;
 mod lexer;
 mod parser;
 mod repl;
-mod token;
+mod representations;
 
 use std::io::{stdin, stdout};
 

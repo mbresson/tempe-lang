@@ -1,4 +1,4 @@
-use crate::token::{keywords, Literal, Token};
+use crate::representations::token::{keywords, Literal, Token};
 
 /// A Lexer iterates over a text and returns tokens.
 pub struct Lexer<'a> {
@@ -304,7 +304,7 @@ impl<'a> Iterator for Lexer<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::token::{Literal, Token};
+    use crate::representations::token::{Literal, Token};
 
     #[test]
     fn next_token_from_code_snippet() {
