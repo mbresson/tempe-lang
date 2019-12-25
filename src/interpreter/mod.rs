@@ -1,5 +1,6 @@
 use crate::representations::ast::{
-    Expression, ExpressionOperator, InfixOperationExpression, PrefixOperationExpression, Statement,
+    ConditionalExpression, Expression, ExpressionOperator, InfixOperationExpression,
+    PrefixOperationExpression, Statement,
 };
 use std::fmt;
 
@@ -89,6 +90,24 @@ fn eval_infix_operation(
     }
 }
 
+fn is_truthy(object: Object) -> bool {
+    let is_false_or_null = object == Object::Boolean(false) || object == Object::Null;
+
+    !is_false_or_null
+}
+
+fn eval_conditional_expression(conditional_expression: &ConditionalExpression) -> Object {
+    let condition = eval_expression(&conditional_expression.condition);
+
+    if is_truthy(condition) {
+        eval_statements(&conditional_expression.consequence.statements)
+    } else if let Some(alternative) = &conditional_expression.alternative {
+        eval_statements(&alternative.statements)
+    } else {
+        Object::Null
+    }
+}
+
 fn eval_expression(expression: &Expression) -> Object {
     match expression {
         Expression::Boolean(value) => Object::Boolean(*value),
@@ -108,6 +127,9 @@ fn eval_expression(expression: &Expression) -> Object {
             let left_value = eval_expression(left_expression);
             let right_value = eval_expression(right_expression);
             eval_infix_operation(infix_operator, left_value, right_value)
+        }
+        Expression::Conditional(conditional_expression) => {
+            eval_conditional_expression(conditional_expression)
         }
         expression => todo!("expression evaluation for {}", expression),
     }
@@ -147,6 +169,25 @@ mod tests {
             .map_err(|errors| format!("parse_program returned errors {:?}", errors))?;
 
         Ok(super::eval_statements(&program.statements))
+    }
+
+    #[test]
+    fn eval_if_else_expressions() {
+        let inputs_to_expected_objects = vec![
+            ("jika (benar) { 10 }", Object::Integer(10)),
+            ("jika (salah) { 10 }", Object::Null),
+            ("jika (1) { 10 }", Object::Integer(10)),
+            ("jika (1 < 2) { 10 }", Object::Integer(10)),
+            ("jika (1 > 2) { 10 }", Object::Null),
+            ("jika (1 > 2) { 10 } jika tidak { 20 }", Object::Integer(20)),
+            ("jika (1 < 2) { 10 } jika tidak { 20 }", Object::Integer(10)),
+        ];
+
+        for (input, expected_object) in inputs_to_expected_objects {
+            let object = parse_eval(input).unwrap();
+
+            assert_eq!(object, expected_object);
+        }
     }
 
     #[test]

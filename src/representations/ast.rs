@@ -164,9 +164,9 @@ impl fmt::Display for InfixOperationExpression {
 
 #[derive(Debug, PartialEq)]
 pub struct ConditionalExpression {
-    condition: Box<Expression>,
-    consequence: BlockStatement,
-    alternative: Option<BlockStatement>,
+    pub condition: Box<Expression>,
+    pub consequence: BlockStatement,
+    pub alternative: Option<BlockStatement>,
 }
 
 impl ConditionalExpression {
@@ -313,7 +313,7 @@ impl fmt::Display for ReturnStatement {
 
 #[derive(Debug, PartialEq)]
 pub struct BlockStatement {
-    statements: Vec<Statement>,
+    pub statements: Vec<Statement>,
 }
 
 impl BlockStatement {
