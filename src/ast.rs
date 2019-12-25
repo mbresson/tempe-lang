@@ -112,8 +112,8 @@ impl fmt::Display for ExpressionOperator {
 
 #[derive(Debug, PartialEq)]
 pub struct PrefixOperationExpression {
-    prefix_operator: ExpressionOperator,
-    right_expression: Box<Expression>,
+    pub prefix_operator: ExpressionOperator,
+    pub right_expression: Box<Expression>,
 }
 
 impl PrefixOperationExpression {
