@@ -296,7 +296,7 @@ impl fmt::Display for LetStatement {
 
 #[derive(Debug, PartialEq)]
 pub struct ReturnStatement {
-    value: Expression,
+    pub value: Expression,
 }
 
 impl ReturnStatement {

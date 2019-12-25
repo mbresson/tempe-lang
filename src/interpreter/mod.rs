@@ -1,6 +1,6 @@
 use crate::representations::ast::{
     ConditionalExpression, Expression, ExpressionOperator, InfixOperationExpression,
-    PrefixOperationExpression, Statement,
+    PrefixOperationExpression, Program, Statement,
 };
 use std::fmt;
 
@@ -8,6 +8,7 @@ use std::fmt;
 pub enum Object {
     Integer(i64),
     Boolean(bool),
+    EarlyReturnedObject(Box<Object>),
     Null,
 }
 
@@ -16,6 +17,7 @@ impl fmt::Display for Object {
         match self {
             Object::Integer(value) => write!(f, "{}", value),
             Object::Boolean(value) => write!(f, "{}", value),
+            Object::EarlyReturnedObject(value) => write!(f, "{}", value),
             Object::Null => write!(f, "null"),
         }
     }
@@ -100,9 +102,9 @@ fn eval_conditional_expression(conditional_expression: &ConditionalExpression) -
     let condition = eval_expression(&conditional_expression.condition);
 
     if is_truthy(condition) {
-        eval_statements(&conditional_expression.consequence.statements)
+        eval_block_statement(&conditional_expression.consequence.statements)
     } else if let Some(alternative) = &conditional_expression.alternative {
-        eval_statements(&alternative.statements)
+        eval_block_statement(&alternative.statements)
     } else {
         Object::Null
     }
@@ -138,18 +140,32 @@ fn eval_expression(expression: &Expression) -> Object {
 fn eval_statement(statement: &Statement) -> Object {
     match statement {
         Statement::Expression(expression) => eval_expression(expression),
+        Statement::Return(return_statement) => {
+            Object::EarlyReturnedObject(Box::new(eval_expression(&return_statement.value)))
+        }
         _ => todo!("statement evaluation for {}", statement),
     }
 }
 
-pub fn eval_statements(statements: &[Statement]) -> Object {
+pub fn eval_block_statement(statements: &[Statement]) -> Object {
     let mut result = Object::Null;
 
     for statement in statements {
         result = eval_statement(statement);
+
+        if let Object::EarlyReturnedObject(_) = result {
+            break;
+        }
     }
 
     result
+}
+
+pub fn eval_program(program: &Program) -> Object {
+    match eval_block_statement(&program.statements) {
+        Object::EarlyReturnedObject(value) => *value,
+        value => value,
+    }
 }
 
 #[cfg(test)]
@@ -168,7 +184,7 @@ mod tests {
             .parse_program()
             .map_err(|errors| format!("parse_program returned errors {:?}", errors))?;
 
-        Ok(super::eval_statements(&program.statements))
+        Ok(super::eval_program(&program))
     }
 
     #[test]
@@ -316,6 +332,34 @@ mod tests {
 
         for (statement, expected_object) in statements_to_expected_objects {
             assert_eq!(eval_statement(&statement), expected_object);
+        }
+    }
+
+    #[test]
+    fn eval_return_statement() {
+        let inputs_to_expected_objects = vec![
+            ("kembalikan 10;", Object::Integer(10)),
+            ("kembalikan 10; 9;", Object::Integer(10)),
+            ("kembalikan 2 * 5; 9;", Object::Integer(10)),
+            ("9; kembalikan 2 * 5; 9;", Object::Integer(10)),
+            (
+                "
+                jika (10 > 1) {
+                    jika (10 > 1) {
+                        kembalikan 10;
+                    }
+
+                    kembalikan 1;
+                }
+                ",
+                Object::Integer(10),
+            ),
+        ];
+
+        for (input, expected_object) in inputs_to_expected_objects {
+            let object = parse_eval(input).unwrap();
+
+            assert_eq!(object, expected_object);
         }
     }
 }

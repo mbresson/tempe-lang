@@ -1,8 +1,7 @@
 use std::io::{BufRead, Write};
 use std::process;
 
-use crate::representations::ast::Program;
-use crate::interpreter::eval_statements;
+use crate::interpreter::eval_program;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 
@@ -23,8 +22,8 @@ pub fn start<R: BufRead, W: Write>(reader: &mut R, writer: &mut W) {
                     let mut parser = Parser::new(&mut lexer);
 
                     match parser.parse_program() {
-                        Ok(Program { statements, .. }) => {
-                            let evaluated = eval_statements(&statements);
+                        Ok(ref program) => {
+                            let evaluated = eval_program(program);
                             writeln!(writer, "{}", evaluated).unwrap();
                         }
                         Err(errors) => {
