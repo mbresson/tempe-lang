@@ -61,6 +61,18 @@ fn eval_integer_infix_operation(
     }
 }
 
+fn eval_boolean_infix_operation(
+    operator: &ExpressionOperator,
+    left_value: bool,
+    right_value: bool,
+) -> Object {
+    match operator {
+        ExpressionOperator::Equal => Object::Boolean(left_value == right_value),
+        ExpressionOperator::NotEqual => Object::Boolean(left_value != right_value),
+        _ => todo!("infix operation with {}", operator),
+    }
+}
+
 fn eval_infix_operation(
     operator: &ExpressionOperator,
     left_value: Object,
@@ -69,6 +81,9 @@ fn eval_infix_operation(
     match (left_value, right_value) {
         (Object::Integer(left_integer), Object::Integer(right_integer)) => {
             eval_integer_infix_operation(operator, left_integer, right_integer)
+        }
+        (Object::Boolean(left_bool), Object::Boolean(right_bool)) => {
+            eval_boolean_infix_operation(operator, left_bool, right_bool)
         }
         _ => todo!("infix operation with {}", operator),
     }
@@ -197,19 +212,24 @@ mod tests {
 
     #[test]
     fn eval_boolean_expression() {
-        let statements_to_expected_objects = vec![
-            (
-                Statement::Expression(Expression::Boolean(true)),
-                Object::Boolean(true),
-            ),
-            (
-                Statement::Expression(Expression::Boolean(false)),
-                Object::Boolean(false),
-            ),
+        let inputs_to_expected_objects = vec![
+            ("benar", Object::Boolean(true)),
+            ("salah", Object::Boolean(false)),
+            ("benar == benar", Object::Boolean(true)),
+            ("salah == salah", Object::Boolean(true)),
+            ("benar == salah", Object::Boolean(false)),
+            ("benar != salah", Object::Boolean(true)),
+            ("salah != benar", Object::Boolean(true)),
+            ("(1 < 2) == benar", Object::Boolean(true)),
+            ("(1 < 2) == salah", Object::Boolean(false)),
+            ("(1 > 2) == benar", Object::Boolean(false)),
+            ("(1 > 2) == salah", Object::Boolean(true)),
         ];
 
-        for (statement, expected_object) in statements_to_expected_objects {
-            assert_eq!(eval_statement(&statement), expected_object);
+        for (input, expected_object) in inputs_to_expected_objects {
+            let object = parse_eval(input).unwrap();
+
+            assert_eq!(object, expected_object);
         }
     }
 
