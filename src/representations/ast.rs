@@ -81,7 +81,7 @@ impl fmt::Display for Expression {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ExpressionOperator {
     Bang,
     Minus,

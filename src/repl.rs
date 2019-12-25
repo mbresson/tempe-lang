@@ -10,34 +10,37 @@ const PROMPT: &[u8] = b">> ";
 pub fn start<R: BufRead, W: Write>(reader: &mut R, writer: &mut W) {
     let mut lines = reader.lines();
 
-    loop {
+    'repl: loop {
         writer.write_all(PROMPT).unwrap();
         writer.flush().unwrap();
 
         if let Some(line_result) = lines.next() {
-            match line_result {
-                Ok(line) => {
-                    let mut lexer = Lexer::new(&line);
+            let line = line_result.unwrap_or_else(|err| {
+                eprintln!("{}", err);
+                process::abort();
+            });
 
-                    let mut parser = Parser::new(&mut lexer);
+            let mut lexer = Lexer::new(&line);
 
-                    match parser.parse_program() {
-                        Ok(ref program) => {
-                            let evaluated = eval_program(program);
-                            writeln!(writer, "{}", evaluated).unwrap();
-                        }
-                        Err(errors) => {
-                            writeln!(writer, "OOOPS! Parsing errors encountered:").unwrap();
+            let program = match Parser::new(&mut lexer).parse_program() {
+                Ok(program) => program,
+                Err(errors) => {
+                    writeln!(writer, "OOOPS! Parsing errors encountered:").unwrap();
 
-                            for error in errors {
-                                writeln!(writer, "{}", error).unwrap();
-                            }
-                        }
+                    for error in errors {
+                        writeln!(writer, "{}", error).unwrap();
                     }
+
+                    continue 'repl;
                 }
-                Err(err) => {
-                    eprintln!("{}", err);
-                    process::abort();
+            };
+
+            match eval_program(&program) {
+                Ok(evaluated) => {
+                    writeln!(writer, "{}", evaluated).unwrap();
+                }
+                Err(error) => {
+                    writeln!(writer, "OOOPS! Evaluation error encountered: {}", error).unwrap();
                 }
             }
         } else {
