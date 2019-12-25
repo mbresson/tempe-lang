@@ -400,7 +400,7 @@ impl<'a> Parser<'a> {
         let operator = Self::get_token_or_error(&self.current_token).and_then(|token| {
             Self::token_to_infix_operator(&token).map_or_else(
                 || Err(ErrorKind::ExpectedInfixOperator(token.clone()).into()),
-                |operator| Ok(operator),
+                Ok,
             )
         })?;
 

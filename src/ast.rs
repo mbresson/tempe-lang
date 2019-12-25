@@ -133,9 +133,9 @@ impl fmt::Display for PrefixOperationExpression {
 
 #[derive(Debug, PartialEq)]
 pub struct InfixOperationExpression {
-    infix_operator: ExpressionOperator,
-    left_expression: Box<Expression>,
-    right_expression: Box<Expression>,
+    pub infix_operator: ExpressionOperator,
+    pub left_expression: Box<Expression>,
+    pub right_expression: Box<Expression>,
 }
 
 impl InfixOperationExpression {

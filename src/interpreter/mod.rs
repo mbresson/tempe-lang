@@ -1,4 +1,6 @@
-use crate::ast::{Expression, ExpressionOperator, PrefixOperationExpression, Statement};
+use crate::ast::{
+    Expression, ExpressionOperator, InfixOperationExpression, PrefixOperationExpression, Statement,
+};
 use std::fmt;
 
 #[derive(PartialEq, Debug)]
@@ -41,6 +43,37 @@ fn eval_prefix_operation(operator: &ExpressionOperator, right_value: Object) -> 
     }
 }
 
+fn eval_integer_infix_operation(
+    operator: &ExpressionOperator,
+    left_value: i64,
+    right_value: i64,
+) -> Object {
+    match operator {
+        ExpressionOperator::Plus => Object::Integer(left_value + right_value),
+        ExpressionOperator::Minus => Object::Integer(left_value - right_value),
+        ExpressionOperator::Multiply => Object::Integer(left_value * right_value),
+        ExpressionOperator::Divide => Object::Integer(left_value / right_value),
+        ExpressionOperator::Equal => Object::Boolean(left_value == right_value),
+        ExpressionOperator::NotEqual => Object::Boolean(left_value != right_value),
+        ExpressionOperator::GreaterThan => Object::Boolean(left_value > right_value),
+        ExpressionOperator::LessThan => Object::Boolean(left_value < right_value),
+        _ => todo!("infix operation with {}", operator),
+    }
+}
+
+fn eval_infix_operation(
+    operator: &ExpressionOperator,
+    left_value: Object,
+    right_value: Object,
+) -> Object {
+    match (left_value, right_value) {
+        (Object::Integer(left_integer), Object::Integer(right_integer)) => {
+            eval_integer_infix_operation(operator, left_integer, right_integer)
+        }
+        _ => todo!("infix operation with {}", operator),
+    }
+}
+
 fn eval_expression(expression: &Expression) -> Object {
     match expression {
         Expression::Boolean(value) => Object::Boolean(*value),
@@ -51,6 +84,15 @@ fn eval_expression(expression: &Expression) -> Object {
         }) => {
             let right_value = eval_expression(right_expression);
             eval_prefix_operation(prefix_operator, right_value)
+        }
+        Expression::InfixOperation(InfixOperationExpression {
+            left_expression,
+            infix_operator,
+            right_expression,
+        }) => {
+            let left_value = eval_expression(left_expression);
+            let right_value = eval_expression(right_expression);
+            eval_infix_operation(infix_operator, left_value, right_value)
         }
         expression => todo!("expression evaluation for {}", expression),
     }
@@ -63,7 +105,7 @@ fn eval_statement(statement: &Statement) -> Object {
     }
 }
 
-pub fn eval_statements(statements: &Vec<Statement>) -> Object {
+pub fn eval_statements(statements: &[Statement]) -> Object {
     let mut result = Object::Null;
 
     for statement in statements {
@@ -77,6 +119,49 @@ pub fn eval_statements(statements: &Vec<Statement>) -> Object {
 mod tests {
     use super::{eval_statement, Object};
     use crate::ast::{Expression, ExpressionOperator, PrefixOperationExpression, Statement};
+    use crate::lexer::Lexer;
+    use crate::parser::Parser;
+
+    fn parse_eval(input: &str) -> Result<Object, String> {
+        let mut lexer = Lexer::new(input);
+
+        let program = Parser::new(&mut lexer)
+            .parse_program()
+            .map_err(|errors| format!("parse_program returned errors {:?}", errors))?;
+
+        Ok(super::eval_statements(&program.statements))
+    }
+
+    #[test]
+    fn eval_infix_operations() {
+        let inputs_to_expected_objects = vec![
+            ("5 + 5 + 5 + 5 - 10", Object::Integer(10)),
+            ("2 * 2 * 2 * 2 * 2", Object::Integer(32)),
+            ("-50 + 100 + -50", Object::Integer(0)),
+            ("5 * 2 + 10", Object::Integer(20)),
+            ("5 + 2 * 10", Object::Integer(25)),
+            ("20 + 2 * -10", Object::Integer(0)),
+            ("50 / 2 * 2 + 10", Object::Integer(60)),
+            ("2 * (5 + 10)", Object::Integer(30)),
+            ("3 * 3 * 3 + 10", Object::Integer(37)),
+            ("3 * (3 * 3) + 10", Object::Integer(37)),
+            ("(5 + 10 * 2 + 15 / 3) * 2 + -10", Object::Integer(50)),
+            ("1 < 2", Object::Boolean(true)),
+            ("1 > 2", Object::Boolean(false)),
+            ("1 < 1", Object::Boolean(false)),
+            ("1 > 1", Object::Boolean(false)),
+            ("1 == 1", Object::Boolean(true)),
+            ("1 != 1", Object::Boolean(false)),
+            ("1 == 2", Object::Boolean(false)),
+            ("1 != 2", Object::Boolean(true)),
+        ];
+
+        for (input, expected_object) in inputs_to_expected_objects {
+            let object = parse_eval(input).unwrap();
+
+            assert_eq!(object, expected_object);
+        }
+    }
 
     #[test]
     fn eval_integer_expression() {
