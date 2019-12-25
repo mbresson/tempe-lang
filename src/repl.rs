@@ -1,6 +1,10 @@
 use std::io::{BufRead, Write};
 use std::process;
 
+use crate::ast::Program;
+use crate::lexer::Lexer;
+use crate::parser::Parser;
+
 const PROMPT: &[u8] = b">> ";
 
 pub fn start<R: BufRead, W: Write>(reader: &mut R, writer: &mut W) {
@@ -13,10 +17,23 @@ pub fn start<R: BufRead, W: Write>(reader: &mut R, writer: &mut W) {
         if let Some(line_result) = lines.next() {
             match line_result {
                 Ok(line) => {
-                    let lexer = crate::lexer::Lexer::new(&line);
+                    let mut lexer = Lexer::new(&line);
 
-                    for token in lexer {
-                        writeln!(writer, "{:?}", token).unwrap();
+                    let mut parser = Parser::new(&mut lexer);
+
+                    match parser.parse_program() {
+                        Ok(Program { statements, .. }) => {
+                            for statement in statements {
+                                writeln!(writer, "{}", statement).unwrap();
+                            }
+                        }
+                        Err(errors) => {
+                            writeln!(writer, "OOOPS! Parsing errors encountered:").unwrap();
+
+                            for error in errors {
+                                writeln!(writer, "{}", error).unwrap();
+                            }
+                        }
                     }
                 }
                 Err(err) => {
