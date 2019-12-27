@@ -16,7 +16,7 @@ pub enum Token {
     Identifier(Literal),
     Integer(i64),
 
-    // keywords
+    // ----- keywords -----
     Function,
     Let,
     True,
@@ -25,7 +25,7 @@ pub enum Token {
     Not, // not to be confused with Bang ("!"), see keywords module for why this keyword exists
     Return,
 
-    // operators
+    // ----- operators -----
     Assign,
     Plus,
     Minus,
@@ -37,7 +37,7 @@ pub enum Token {
     Equal,
     NotEqual,
 
-    // other symbols
+    // ----- other symbols -----
     Comma,
     Semicolon,
 
@@ -45,6 +45,20 @@ pub enum Token {
     ClosingParenthesis,
     OpeningBrace,
     ClosingBrace,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Context {
+    pub start_line: usize,
+    pub start_column: usize,
+    pub end_line: usize,
+    pub end_column: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct TokenWithContext {
+    pub token: Token,
+    pub context: Context,
 }
 
 pub mod keywords {

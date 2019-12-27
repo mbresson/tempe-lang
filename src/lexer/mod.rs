@@ -1,9 +1,12 @@
-use crate::representations::token::{keywords, Literal, Token};
+use crate::representations::token::{keywords, Context, Literal, Token, TokenWithContext};
 
 /// A Lexer iterates over a text and returns tokens.
 pub struct Lexer<'a> {
     chars_iterator: std::str::Chars<'a>,
-    previous_char: Option<char>,
+
+    current_char: Option<char>,
+    current_line: usize,
+    current_column: usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -18,16 +21,38 @@ impl<'a> Lexer<'a> {
     /// ```
     pub fn new(text: &'a str) -> Self {
         let mut chars_iterator = text.chars();
-        let first_char = chars_iterator.next();
+        let current_char = chars_iterator.next();
 
         Lexer {
             chars_iterator,
-            previous_char: first_char,
+            current_char,
+            current_line: 0,
+            current_column: 0,
         }
     }
 
+    fn is_new_line(ch: char) -> bool {
+        // for commodity purposes, we choose to consider only '\n' as a newline,
+        // ignoring \r (\r\n, \r\r\n, etc will hence amount to only one single new line)
+        ch == '\n'
+    }
+
+    fn advance_to_next_char(&mut self) -> Option<char> {
+        self.current_char = self.chars_iterator.next();
+
+        self.current_column += 1;
+        if let Some(ch) = self.current_char {
+            if Self::is_new_line(ch) {
+                self.current_line += 1;
+                self.current_column = 0;
+            }
+        }
+
+        self.current_char
+    }
+
     fn get_next_non_whitespace_char_or_eof(&mut self) -> Option<char> {
-        while let Some(current_char) = self.chars_iterator.next() {
+        while let Some(current_char) = self.advance_to_next_char() {
             if !current_char.is_whitespace() {
                 return Some(current_char);
             }
@@ -69,18 +94,18 @@ impl<'a> Lexer<'a> {
         let mut token_buffer = first_letter.to_string();
 
         // read following characters until the first char that is not a letter, digit or underscore
-        while let Some(current_char) = self.chars_iterator.next() {
+        while let Some(current_char) = self.advance_to_next_char() {
             if current_char.is_alphanumeric() || current_char == '_' {
                 token_buffer.push(current_char);
             } else {
-                self.previous_char = Some(current_char);
+                self.current_char = Some(current_char);
 
                 return Self::parse_identifier_or_keyword(&token_buffer);
             }
         }
 
         // or until no more char can be read (EOF)
-        self.previous_char = None;
+        self.current_char = None;
 
         Self::parse_identifier_or_keyword(&token_buffer)
     }
@@ -117,36 +142,36 @@ impl<'a> Lexer<'a> {
         let number_base = 10;
 
         // read following characters until the first non-digit
-        while let Some(current_char) = self.chars_iterator.next() {
+        while let Some(current_char) = self.advance_to_next_char() {
             if current_char.is_digit(number_base) {
                 token_buffer.push(current_char);
             } else if current_char.is_alphabetic() {
                 token_buffer.push(current_char);
 
                 'read_until_end_of_illegal_sequence: loop {
-                    if let Some(next_char) = self.chars_iterator.next() {
+                    if let Some(next_char) = self.advance_to_next_char() {
                         if next_char.is_alphanumeric() {
                             token_buffer.push(next_char);
                         } else {
-                            self.previous_char = Some(next_char);
+                            self.current_char = Some(next_char);
                             break 'read_until_end_of_illegal_sequence;
                         }
                     } else {
-                        self.previous_char = None;
+                        self.current_char = None;
                         break 'read_until_end_of_illegal_sequence;
                     }
                 }
 
                 return Token::Illegal(Literal(token_buffer));
             } else {
-                self.previous_char = Some(current_char);
+                self.current_char = Some(current_char);
 
                 return Self::parse_base_10_integer(&token_buffer);
             }
         }
 
         // or until no more char can be read (EOF)
-        self.previous_char = None;
+        self.current_char = None;
 
         Self::parse_base_10_integer(&token_buffer)
     }
@@ -160,81 +185,81 @@ impl<'a> Lexer<'a> {
     fn read_special_symbol(&mut self, first_char: char) -> Token {
         match first_char {
             '(' => {
-                self.previous_char = self.chars_iterator.next();
+                self.current_char = self.advance_to_next_char();
 
                 Token::OpeningParenthesis
             }
             ')' => {
-                self.previous_char = self.chars_iterator.next();
+                self.current_char = self.advance_to_next_char();
 
                 Token::ClosingParenthesis
             }
             '{' => {
-                self.previous_char = self.chars_iterator.next();
+                self.current_char = self.advance_to_next_char();
 
                 Token::OpeningBrace
             }
             '}' => {
-                self.previous_char = self.chars_iterator.next();
+                self.current_char = self.advance_to_next_char();
 
                 Token::ClosingBrace
             }
             ',' => {
-                self.previous_char = self.chars_iterator.next();
+                self.current_char = self.advance_to_next_char();
 
                 Token::Comma
             }
             ';' => {
-                self.previous_char = self.chars_iterator.next();
+                self.current_char = self.advance_to_next_char();
 
                 Token::Semicolon
             }
             '+' => {
-                self.previous_char = self.chars_iterator.next();
+                self.current_char = self.advance_to_next_char();
 
                 Token::Plus
             }
             '-' => {
-                self.previous_char = self.chars_iterator.next();
+                self.current_char = self.advance_to_next_char();
 
                 Token::Minus
             }
             '*' => {
-                self.previous_char = self.chars_iterator.next();
+                self.current_char = self.advance_to_next_char();
 
                 Token::Asterisk
             }
             '/' => {
-                self.previous_char = self.chars_iterator.next();
+                self.current_char = self.advance_to_next_char();
 
                 Token::Slash
             }
             '<' => {
-                self.previous_char = self.chars_iterator.next();
+                self.current_char = self.advance_to_next_char();
 
                 Token::LessThan
             }
             '>' => {
-                self.previous_char = self.chars_iterator.next();
+                self.current_char = self.advance_to_next_char();
 
                 Token::GreaterThan
             }
             '=' => {
                 // can be either Assign ("=") or Equal ("==")
 
-                match self.chars_iterator.next() {
+                match self.advance_to_next_char() {
                     Some('=') => {
-                        self.previous_char = self.chars_iterator.next();
+                        self.current_char = self.advance_to_next_char();
 
                         Token::Equal
                     }
                     Some(other_char) => {
-                        self.previous_char = Some(other_char);
+                        self.current_char = Some(other_char);
 
                         Token::Assign
                     }
                     None => {
-                        self.previous_char = None;
+                        self.current_char = None;
 
                         Token::Assign
                     }
@@ -243,58 +268,73 @@ impl<'a> Lexer<'a> {
             '!' => {
                 // can be either Bang ("!") or NotEqual ("!=")
 
-                match self.chars_iterator.next() {
+                match self.advance_to_next_char() {
                     Some('=') => {
-                        self.previous_char = self.chars_iterator.next();
+                        self.current_char = self.advance_to_next_char();
 
                         Token::NotEqual
                     }
                     Some(other_char) => {
-                        self.previous_char = Some(other_char);
+                        self.current_char = Some(other_char);
 
                         Token::Bang
                     }
                     None => {
-                        self.previous_char = None;
+                        self.current_char = None;
 
                         Token::Bang
                     }
                 }
             }
             illegal => {
-                self.previous_char = self.chars_iterator.next();
+                self.current_char = self.advance_to_next_char();
 
                 Token::Illegal(Literal(illegal.to_string()))
             }
         }
     }
 
-    fn read_token(&mut self, first_char: char) -> Option<Token> {
+    fn read_token(&mut self, first_char: char) -> Option<TokenWithContext> {
         let mut current_char = first_char;
+        let mut start_line = self.current_line;
+        let mut start_column = self.current_column;
 
         if current_char.is_whitespace() {
             if let Some(next_char) = self.get_next_non_whitespace_char_or_eof() {
+                start_line = self.current_line;
+                start_column = self.current_column;
+
                 current_char = next_char;
             } else {
                 return None;
             }
         }
 
-        if current_char.is_alphabetic() {
-            Some(self.read_identifier_or_keyword(current_char))
+        let token = if current_char.is_alphabetic() {
+            self.read_identifier_or_keyword(current_char)
         } else if current_char.is_ascii_digit() {
-            Some(self.read_integer(current_char))
+            self.read_integer(current_char)
         } else {
-            Some(self.read_special_symbol(current_char))
-        }
+            self.read_special_symbol(current_char)
+        };
+
+        Some(TokenWithContext {
+            token,
+            context: Context {
+                start_line,
+                start_column,
+                end_line: self.current_line,
+                end_column: self.current_column,
+            },
+        })
     }
 }
 
 impl<'a> Iterator for Lexer<'a> {
-    type Item = Token;
+    type Item = TokenWithContext;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(current_char) = self.previous_char {
+        if let Some(current_char) = self.current_char {
             self.read_token(current_char)
         } else {
             None
@@ -304,7 +344,7 @@ impl<'a> Iterator for Lexer<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::representations::token::{Literal, Token};
+    use crate::representations::token::{Literal, Token, TokenWithContext};
 
     #[test]
     fn next_token_from_code_snippet() {
@@ -456,7 +496,7 @@ mod tests {
 
         for expected_token in expected_tokens {
             match lexer.next() {
-                Some(token) => {
+                Some(TokenWithContext { token, .. }) => {
                     assert_eq!(token, expected_token);
                 }
                 None => {
@@ -485,7 +525,7 @@ mod tests {
 
         for expected_token in expected_tokens {
             match lexer.next() {
-                Some(token) => {
+                Some(TokenWithContext { token, .. }) => {
                     assert_eq!(token, expected_token);
                 }
                 None => {
@@ -495,7 +535,7 @@ mod tests {
         }
     }
 
-       #[test]
+    #[test]
     fn next_token_from_single_line_with_prefix_operator() {
         let input = "-15, -ab, -ab()";
 
@@ -516,7 +556,7 @@ mod tests {
 
         for expected_token in expected_tokens {
             match lexer.next() {
-                Some(token) => {
+                Some(TokenWithContext { token, .. }) => {
                     assert_eq!(token, expected_token);
                 }
                 None => {

@@ -3,7 +3,10 @@ use std::process;
 
 use crate::interpreter::eval_program;
 use crate::lexer::Lexer;
-use crate::parser::Parser;
+use crate::parser::{
+    errors::{Error as ParserError, ErrorKind as ParserErrorKind},
+    Parser,
+};
 
 const PROMPT: &[u8] = b">> ";
 
@@ -25,10 +28,8 @@ pub fn start<R: BufRead, W: Write>(reader: &mut R, writer: &mut W) {
             let program = match Parser::new(&mut lexer).parse_program() {
                 Ok(program) => program,
                 Err(errors) => {
-                    writeln!(writer, "OOOPS! Parsing errors encountered:").unwrap();
-
-                    for error in errors {
-                        writeln!(writer, "{}", error).unwrap();
+                    for error in &errors {
+                        write_parser_error(writer, error);
                     }
 
                     continue 'repl;
@@ -47,4 +48,26 @@ pub fn start<R: BufRead, W: Write>(reader: &mut R, writer: &mut W) {
             return;
         }
     }
+}
+
+fn write_parser_error<W: Write>(writer: &mut W, error: &ParserError) {
+    let blamed_column = if let ParserError(
+        ParserErrorKind::CannotParseTokenAsPrefix(token_with_context),
+        _,
+    ) = error
+    {
+        token_with_context.context.start_column
+    } else {
+        error.context().end_column
+    };
+
+    writeln!(
+        writer,
+        "{}{}^",
+        " ".repeat(PROMPT.len()),
+        ".".repeat(blamed_column)
+    )
+    .unwrap();
+
+    writeln!(writer, "{} {}", "!".repeat(PROMPT.len() - 1), error).unwrap();
 }

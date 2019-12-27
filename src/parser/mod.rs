@@ -3,23 +3,31 @@ use crate::representations::ast::{
     FunctionExpression, Identifier, InfixOperationExpression, LetStatement, Precedence,
     PrefixOperationExpression, Program, ReturnStatement, Statement,
 };
-use crate::representations::token::Token;
+use crate::representations::token::{Context, Token, TokenWithContext};
 use std::vec::Vec;
 
-mod errors;
+pub mod errors;
 use errors::{Error, ErrorKind, Result as ParsingResult};
 
 pub struct Parser<'a> {
-    token_iterator: &'a mut dyn Iterator<Item = Token>,
+    token_iterator: &'a mut dyn Iterator<Item = TokenWithContext>,
 
-    current_token: Option<Token>,
-    peek_token: Option<Token>,
+    previous_context: Context,
+
+    current_token: Option<TokenWithContext>,
+    peek_token: Option<TokenWithContext>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(token_iterator: &'a mut dyn Iterator<Item = Token>) -> Self {
+    pub fn new(token_iterator: &'a mut dyn Iterator<Item = TokenWithContext>) -> Self {
         let mut parser = Parser {
             token_iterator,
+            previous_context: Context {
+                start_line: 0,
+                start_column: 0,
+                end_line: 0,
+                end_column: 0,
+            },
             current_token: None,
             peek_token: None,
         };
@@ -31,7 +39,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_infix(&mut self, left_expression: Expression) -> ParsingResult<Expression> {
-        match Self::get_token_or_error(&self.current_token)? {
+        let token_with_context = self.get_token_or_error(&self.current_token)?;
+
+        match &token_with_context.token {
             Token::Plus
             | Token::Minus
             | Token::Slash
@@ -41,12 +51,14 @@ impl<'a> Parser<'a> {
             | Token::LessThan
             | Token::GreaterThan => self.parse_infix_expression(left_expression),
             Token::OpeningParenthesis => self.parse_function_call_expression(left_expression),
-            token => Err(ErrorKind::ExpectedInfixOperator(token.clone()).into()),
+            _ => Err(ErrorKind::ExpectedInfixOperator(token_with_context.clone()).into()),
         }
     }
 
     fn parse_prefix(&mut self) -> ParsingResult<Expression> {
-        match Self::get_token_or_error(&self.current_token)? {
+        let token_with_context = self.get_token_or_error(&self.current_token)?;
+
+        match &token_with_context.token {
             Token::Identifier(literal) => {
                 Ok(Expression::Identifier(Identifier::new(literal.clone())))
             }
@@ -57,17 +69,23 @@ impl<'a> Parser<'a> {
             Token::OpeningParenthesis => self.parse_grouped_expression(),
             Token::If => self.parse_if_expression(),
             Token::Function => self.parse_function_expression(),
-            token => Err(ErrorKind::CannotParseTokenAsPrefix(token.clone()).into()),
+            _ => Err(ErrorKind::CannotParseTokenAsPrefix(token_with_context.clone()).into()),
         }
     }
 
     fn next_token(&mut self) {
+        if let Some(token_with_context) = &self.current_token {
+            self.previous_context = token_with_context.context;
+        }
+
         self.current_token = self.peek_token.take();
         self.peek_token = self.token_iterator.next();
     }
 
     fn parse_statement(&mut self) -> ParsingResult<Statement> {
-        match Self::get_token_or_error(&self.current_token)? {
+        let token_with_context = self.get_token_or_error(&self.current_token)?;
+
+        match token_with_context.token {
             Token::Let => self.parse_let_statement(),
             Token::Return => self.parse_return_statement(),
             _ => self.parse_expression_statement(),
@@ -109,8 +127,8 @@ impl<'a> Parser<'a> {
     }
 
     fn jump_to_next_statement(&mut self) {
-        while let Some(token) = &self.current_token {
-            if *token == Token::Semicolon {
+        while let Some(token_with_context) = &self.current_token {
+            if token_with_context.token == Token::Semicolon {
                 self.next_token();
                 return;
             }
@@ -132,8 +150,11 @@ impl<'a> Parser<'a> {
     fn parse_let_statement(&mut self) -> ParsingResult<Statement> {
         self.next_token();
 
-        let identifier = match Self::get_token_or_error(&self.current_token)? {
-            Token::Identifier(literal) => Identifier::new(literal.clone()),
+        let identifier = match self.get_token_or_error(&self.current_token)? {
+            TokenWithContext {
+                token: Token::Identifier(literal),
+                ..
+            } => Identifier::new(literal.clone()),
             token => {
                 return Err(ErrorKind::ExpectedIdentifier(token.clone()).into());
             }
@@ -141,16 +162,19 @@ impl<'a> Parser<'a> {
 
         self.next_token();
 
-        match Self::get_token_or_error(&self.current_token.clone())? {
-            Token::Assign => {}
-            illegal_token => {
-                return Err(
-                    ErrorKind::ExpectedSpecificToken(Token::Assign, illegal_token.clone()).into(),
-                );
-            }
-        };
+        self.expect_token_or_error(&self.current_token, Token::Assign)?;
+
+        let previous_token = self.current_token.as_ref().unwrap().clone();
 
         self.next_token();
+
+        if self.current_token.is_none() || Self::is_token(&self.current_token, Token::Semicolon) {
+            return Err(ErrorKind::ExpectedExpression(
+                previous_token.context,
+                self.current_token.clone(),
+            )
+            .into());
+        }
 
         let value = self.parse_expression(Precedence::Lowest)?;
 
@@ -163,11 +187,11 @@ impl<'a> Parser<'a> {
         let mut left_expression = self.parse_prefix()?;
 
         'parsing_expression: while let Some(following_token) = &self.peek_token {
-            if let Some(operator) = Self::token_to_infix_operator(&following_token) {
+            if let Some(operator) = Self::token_to_infix_operator(&following_token.token) {
                 if Precedence::from(&operator) <= precedence {
                     break 'parsing_expression;
                 }
-            } else if *following_token != Token::OpeningParenthesis {
+            } else if following_token.token != Token::OpeningParenthesis {
                 break 'parsing_expression;
             }
 
@@ -180,11 +204,13 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_prefix_expression(&mut self) -> ParsingResult<Expression> {
-        let operator = match Self::get_token_or_error(&self.current_token)? {
+        let token_with_context = self.get_token_or_error(&self.current_token)?;
+
+        let operator = match &token_with_context.token {
             Token::Bang => ExpressionOperator::Bang,
             Token::Minus => ExpressionOperator::Minus,
-            token => {
-                return Err(ErrorKind::ExpectedPrefixOperator(token.clone()).into());
+            _ => {
+                return Err(ErrorKind::ExpectedPrefixOperator(token_with_context.clone()).into());
             }
         };
 
@@ -201,7 +227,7 @@ impl<'a> Parser<'a> {
 
         let expression = self.parse_expression(Precedence::Lowest);
 
-        Self::expect_token_or_error(&self.peek_token, Token::ClosingParenthesis)?;
+        self.expect_token_or_error(&self.peek_token, Token::ClosingParenthesis)?;
 
         self.next_token();
 
@@ -225,7 +251,7 @@ impl<'a> Parser<'a> {
     fn parse_function_expression(&mut self) -> ParsingResult<Expression> {
         self.next_token();
 
-        Self::expect_token_or_error(&self.current_token, Token::OpeningParenthesis)?;
+        self.expect_token_or_error(&self.current_token, Token::OpeningParenthesis)?;
 
         self.next_token();
 
@@ -233,11 +259,11 @@ impl<'a> Parser<'a> {
 
         self.next_token();
 
-        Self::expect_token_or_error(&self.current_token, Token::OpeningBrace)?;
+        self.expect_token_or_error(&self.current_token, Token::OpeningBrace)?;
 
         let body = self.parse_block_statement()?;
 
-        Self::expect_token_or_error(&self.current_token, Token::ClosingBrace)?;
+        self.expect_token_or_error(&self.current_token, Token::ClosingBrace)?;
 
         self.next_token();
 
@@ -263,7 +289,7 @@ impl<'a> Parser<'a> {
     fn parse_function_call_arguments(&mut self) -> ParsingResult<Vec<Expression>> {
         let mut arguments = Vec::new();
 
-        match Self::get_token_or_error(&self.current_token)? {
+        match self.get_token_or_error(&self.current_token)?.token {
             Token::ClosingParenthesis => return Ok(arguments),
             _ => arguments.push(self.parse_expression(Precedence::Lowest)?),
         }
@@ -271,7 +297,10 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         loop {
-            if self.current_token != Some(Token::Comma) {
+            let current_token_is_comma_between_arguments =
+                Self::is_token(&self.current_token, Token::Comma);
+
+            if !current_token_is_comma_between_arguments {
                 break;
             }
 
@@ -282,7 +311,7 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
 
-        Self::expect_token_or_error(&self.current_token, Token::ClosingParenthesis)?;
+        self.expect_token_or_error(&self.current_token, Token::ClosingParenthesis)?;
 
         Ok(arguments)
     }
@@ -290,9 +319,15 @@ impl<'a> Parser<'a> {
     fn parse_function_expression_parameters(&mut self) -> ParsingResult<Vec<Identifier>> {
         let mut identifiers = Vec::new();
 
-        match Self::get_token_or_error(&self.current_token)? {
-            Token::ClosingParenthesis => return Ok(identifiers),
-            Token::Identifier(literal) => identifiers.push(Identifier::new(literal.clone())),
+        match self.get_token_or_error(&self.current_token)? {
+            TokenWithContext {
+                token: Token::ClosingParenthesis,
+                ..
+            } => return Ok(identifiers),
+            TokenWithContext {
+                token: Token::Identifier(literal),
+                ..
+            } => identifiers.push(Identifier::new(literal.clone())),
             illegal_token => {
                 return Err(ErrorKind::ExpectedIdentifier(illegal_token.clone()).into())
             }
@@ -301,14 +336,20 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         loop {
-            if self.current_token != Some(Token::Comma) {
+            let current_token_is_comma_between_arguments =
+                Self::is_token(&self.current_token, Token::Comma);
+
+            if !current_token_is_comma_between_arguments {
                 break;
             }
 
             self.next_token();
 
-            match Self::get_token_or_error(&self.current_token)? {
-                Token::Identifier(literal) => identifiers.push(Identifier::new(literal.clone())),
+            match self.get_token_or_error(&self.current_token)? {
+                TokenWithContext {
+                    token: Token::Identifier(literal),
+                    ..
+                } => identifiers.push(Identifier::new(literal.clone())),
                 illegal_token => {
                     return Err(ErrorKind::ExpectedIdentifier(illegal_token.clone()).into())
                 }
@@ -317,7 +358,7 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
 
-        Self::expect_token_or_error(&self.current_token, Token::ClosingParenthesis)?;
+        self.expect_token_or_error(&self.current_token, Token::ClosingParenthesis)?;
 
         Ok(identifiers)
     }
@@ -325,7 +366,7 @@ impl<'a> Parser<'a> {
     fn parse_if_expression(&mut self) -> ParsingResult<Expression> {
         self.next_token();
 
-        Self::expect_token_or_error(&self.current_token, Token::OpeningParenthesis)?;
+        self.expect_token_or_error(&self.current_token, Token::OpeningParenthesis)?;
 
         self.next_token();
 
@@ -333,32 +374,33 @@ impl<'a> Parser<'a> {
 
         self.next_token();
 
-        Self::expect_token_or_error(&self.current_token, Token::ClosingParenthesis)?;
+        self.expect_token_or_error(&self.current_token, Token::ClosingParenthesis)?;
 
         self.next_token();
 
-        Self::expect_token_or_error(&self.current_token, Token::OpeningBrace)?;
+        self.expect_token_or_error(&self.current_token, Token::OpeningBrace)?;
 
         let consequence = self.parse_block_statement()?;
 
-        Self::expect_token_or_error(&self.current_token, Token::ClosingBrace)?;
+        self.expect_token_or_error(&self.current_token, Token::ClosingBrace)?;
 
         self.next_token();
 
         // in Indonesian, "else" is translated by a group of 2 words: "jika tidak" (literally "if not")
         // so we must check the current token (if) + the following token (not) to detect "else"
-        let is_else_expression =
-            self.current_token == Some(Token::If) && self.peek_token == Some(Token::Not);
+        let is_else_expression = Self::is_token(&self.current_token, Token::If)
+            && Self::is_token(&self.peek_token, Token::Not);
+
         let alternative = if is_else_expression {
             // skip the "if not" a.k.a. "else" tokens
             self.next_token();
             self.next_token();
 
-            Self::expect_token_or_error(&self.current_token, Token::OpeningBrace)?;
+            self.expect_token_or_error(&self.current_token, Token::OpeningBrace)?;
 
             let alternative_consequence = self.parse_block_statement()?;
 
-            Self::expect_token_or_error(&self.current_token, Token::ClosingBrace)?;
+            self.expect_token_or_error(&self.current_token, Token::ClosingBrace)?;
 
             self.next_token();
 
@@ -379,14 +421,14 @@ impl<'a> Parser<'a> {
 
         self.next_token();
 
-        while let Some(token) = &self.current_token {
-            if *token == Token::ClosingBrace {
+        while let Some(token_with_context) = &self.current_token {
+            if token_with_context.token == Token::ClosingBrace {
                 break;
             }
 
             let statement = self.parse_statement()?;
 
-            if self.current_token == Some(Token::Semicolon) {
+            if Self::is_token(&self.current_token, Token::Semicolon) {
                 self.next_token();
             }
 
@@ -397,12 +439,14 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_infix_expression(&mut self, left_expression: Expression) -> ParsingResult<Expression> {
-        let operator = Self::get_token_or_error(&self.current_token).and_then(|token| {
-            Self::token_to_infix_operator(&token).map_or_else(
-                || Err(ErrorKind::ExpectedInfixOperator(token.clone()).into()),
-                Ok,
-            )
-        })?;
+        let operator =
+            self.get_token_or_error(&self.current_token)
+                .and_then(|token_with_context| {
+                    Self::token_to_infix_operator(&token_with_context.token).map_or_else(
+                        || Err(ErrorKind::ExpectedInfixOperator(token_with_context.clone()).into()),
+                        Ok,
+                    )
+                })?;
 
         self.next_token();
 
@@ -416,34 +460,53 @@ impl<'a> Parser<'a> {
     }
 
     fn expect_token_or_error(
-        tentative_token: &Option<Token>,
+        &self,
+        tentative_token: &Option<TokenWithContext>,
         expected_token: Token,
     ) -> ParsingResult<()> {
-        let token = Self::get_token_or_error(tentative_token)?;
+        let token_with_context = self.get_token_or_error(tentative_token)?;
 
-        if *token != expected_token {
-            Err(ErrorKind::ExpectedSpecificToken(expected_token, token.clone()).into())
+        if token_with_context.token != expected_token {
+            Err(ErrorKind::ExpectedSpecificToken(expected_token, token_with_context.clone()).into())
         } else {
             Ok(())
         }
     }
 
-    fn get_token_or_error(tentative_token: &Option<Token>) -> ParsingResult<&Token> {
+    fn is_token(tentative_token: &Option<TokenWithContext>, expected_token: Token) -> bool {
+        tentative_token
+            .as_ref()
+            .map_or(false, |token_with_context| {
+                token_with_context.token == expected_token
+            })
+    }
+
+    fn get_token_or_error<'b>(
+        &self,
+        tentative_token: &'b Option<TokenWithContext>,
+    ) -> ParsingResult<&'b TokenWithContext> {
         match tentative_token {
             Some(token) => Ok(token),
-            None => Err(ErrorKind::ExpectedToken.into()),
+            None => Err(ErrorKind::ExpectedToken(
+                self.current_token
+                    .as_ref()
+                    .map_or(self.previous_context, |token_with_context| {
+                        token_with_context.context
+                    }),
+            )
+            .into()),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::lexer::Lexer;
     use crate::representations::ast::{
         BlockStatement, ConditionalExpression, Expression, ExpressionOperator,
         FunctionCallExpression, FunctionExpression, Identifier, InfixOperationExpression,
         LetStatement, PrefixOperationExpression, ReturnStatement, Statement,
     };
-    use crate::lexer::Lexer;
     use crate::representations::token::Literal;
 
     fn parse(input: &str) -> Result<super::Program, String> {
