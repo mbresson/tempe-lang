@@ -674,7 +674,7 @@ mod tests {
 
     #[test]
     fn infix_expressions() {
-        let input = r#"
+        let input = "
             5 + 6;
             5 + ab;
             5 - 6;
@@ -687,7 +687,7 @@ mod tests {
             benar == benar;
             benar != salah;
             salah == salah;
-        "#;
+        ";
 
         let program = parse(input).unwrap();
 
@@ -759,115 +759,50 @@ mod tests {
 
     #[test]
     fn infix_expressions_with_operator_precedence() {
-        struct InputAndExpected {
-            input: &'static str,
-            expected: &'static str,
-        }
-
-        let input = vec![
-            InputAndExpected {
-                input: "-a * b",
-                expected: "((-a) * b);",
-            },
-            InputAndExpected {
-                input: "!-a",
-                expected: "(!(-a));",
-            },
-            InputAndExpected {
-                input: "a + b + c",
-                expected: "((a + b) + c);",
-            },
-            InputAndExpected {
-                input: "a + b - c",
-                expected: "((a + b) - c);",
-            },
-            InputAndExpected {
-                input: "a * b * c",
-                expected: "((a * b) * c);",
-            },
-            InputAndExpected {
-                input: "a * b / c",
-                expected: "((a * b) / c);",
-            },
-            InputAndExpected {
-                input: "a + b / c",
-                expected: "(a + (b / c));",
-            },
-            InputAndExpected {
-                input: "a + b * c + d / e - f",
-                expected: "(((a + (b * c)) + (d / e)) - f);",
-            },
-            InputAndExpected {
-                input: "3 + 4; -5 * 5",
-                expected: "(3 + 4);\n\
-                           ((-5) * 5);",
-            },
-            InputAndExpected {
-                input: "5 > 4 == 3 < 4",
-                expected: "((5 > 4) == (3 < 4));",
-            },
-            InputAndExpected {
-                input: "5 < 4 != 3 > 4",
-                expected: "((5 < 4) != (3 > 4));",
-            },
-            InputAndExpected {
-                input: "3 + 4 * 5 == 3 * 1 + 4 * 5",
-                expected: "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)));",
-            },
-            InputAndExpected {
-                input: "benar",
-                expected: "benar;",
-            },
-            InputAndExpected {
-                input: "salah",
-                expected: "salah;",
-            },
-            InputAndExpected {
-                input: "3 > 5 == false",
-                expected: "((3 > 5) == false);",
-            },
-            InputAndExpected {
-                input: "3 < 5 == true",
-                expected: "((3 < 5) == true);",
-            },
-            InputAndExpected {
-                input: "1 + (2 + 3) + 4",
-                expected: "((1 + (2 + 3)) + 4);",
-            },
-            InputAndExpected {
-                input: "(5 + 5) * 2",
-                expected: "((5 + 5) * 2);",
-            },
-            InputAndExpected {
-                input: "2 / (5 + 5)",
-                expected: "(2 / (5 + 5));",
-            },
-            InputAndExpected {
-                input: "-(5 + 5)",
-                expected: "(-(5 + 5));",
-            },
-            InputAndExpected {
-                input: "!(true == true)",
-                expected: "(!(true == true));",
-            },
-            InputAndExpected {
-                input: "a + add(b * c) + d",
-                expected: "((a + add((b * c))) + d);",
-            },
-            InputAndExpected {
-                input: "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))",
-                expected: "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)));",
-            },
-            InputAndExpected {
-                input: "add(a + b + c * d / f + g)",
-                expected: "add((((a + b) + ((c * d) / f)) + g));",
-            },
+        let inputs_to_expected = vec![
+            ("-a * b", "((-a) * b);"),
+            ("!-a", "(!(-a));"),
+            ("a + b + c", "((a + b) + c);"),
+            ("a + b - c", "((a + b) - c);"),
+            ("a * b * c", "((a * b) * c);"),
+            ("a * b / c", "((a * b) / c);"),
+            ("a + b / c", "(a + (b / c));"),
+            ("a + b * c + d / e - f", "(((a + (b * c)) + (d / e)) - f);"),
+            (
+                "3 + 4; -5 * 5",
+                "(3 + 4);\n\
+                 ((-5) * 5);",
+            ),
+            ("5 > 4 == 3 < 4", "((5 > 4) == (3 < 4));"),
+            ("5 < 4 != 3 > 4", "((5 < 4) != (3 > 4));"),
+            (
+                "3 + 4 * 5 == 3 * 1 + 4 * 5",
+                "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)));",
+            ),
+            ("benar", "benar;"),
+            ("salah", "salah;"),
+            ("3 > 5 == false", "((3 > 5) == false);"),
+            ("3 < 5 == true", "((3 < 5) == true);"),
+            ("1 + (2 + 3) + 4", "((1 + (2 + 3)) + 4);"),
+            ("(5 + 5) * 2", "((5 + 5) * 2);"),
+            ("2 / (5 + 5)", "(2 / (5 + 5));"),
+            ("-(5 + 5)", "(-(5 + 5));"),
+            ("!(true == true)", "(!(true == true));"),
+            ("a + add(b * c) + d", "((a + add((b * c))) + d);"),
+            (
+                "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))",
+                "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)));",
+            ),
+            (
+                "add(a + b + c * d / f + g)",
+                "add((((a + b) + ((c * d) / f)) + g));",
+            ),
         ];
 
-        for input_and_expected in input {
-            let program = parse(input_and_expected.input).unwrap();
+        for (input, expected) in inputs_to_expected {
+            let program = parse(input).unwrap();
 
-            assert_eq!(format!("{}", program), input_and_expected.expected);
+            assert_eq!(format!("{}", program), expected);
         }
     }
 
@@ -946,30 +881,25 @@ mod tests {
 
     #[test]
     fn function_parameters() {
-        struct InputAndExpected {
-            input: &'static str,
-            expected: Vec<Statement>,
-        }
-
-        let input = vec![
-            InputAndExpected {
-                input: "fungsi() {};",
-                expected: vec![Statement::Expression(Expression::Function(
+        let inputs_to_expected = vec![
+            (
+                "fungsi() {};",
+                vec![Statement::Expression(Expression::Function(
                     FunctionExpression::new(vec![], BlockStatement::new(vec![])),
                 ))],
-            },
-            InputAndExpected {
-                input: "fungsi(x) {};",
-                expected: vec![Statement::Expression(Expression::Function(
+            ),
+            (
+                "fungsi(x) {};",
+                vec![Statement::Expression(Expression::Function(
                     FunctionExpression::new(
                         vec![Identifier::new(Literal("x".to_string()))],
                         BlockStatement::new(vec![]),
                     ),
                 ))],
-            },
-            InputAndExpected {
-                input: "fungsi(x, y, z) {};",
-                expected: vec![Statement::Expression(Expression::Function(
+            ),
+            (
+                "fungsi(x, y, z) {};",
+                vec![Statement::Expression(Expression::Function(
                     FunctionExpression::new(
                         vec![
                             Identifier::new(Literal("x".to_string())),
@@ -979,13 +909,13 @@ mod tests {
                         BlockStatement::new(vec![]),
                     ),
                 ))],
-            },
+            ),
         ];
 
-        for input_and_expected in input {
-            let program = parse(input_and_expected.input).unwrap();
+        for (input, expected) in inputs_to_expected {
+            let program = parse(input).unwrap();
 
-            assert_eq!(program.statements, input_and_expected.expected);
+            assert_eq!(program.statements, expected);
         }
     }
 
