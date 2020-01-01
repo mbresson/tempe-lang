@@ -69,6 +69,7 @@ impl<'a> Parser<'a> {
             Token::OpeningParenthesis => self.parse_grouped_expression(),
             Token::If => self.parse_if_expression(),
             Token::Function => self.parse_function_expression(),
+            Token::Illegal(_) => Err(ErrorKind::IllegalToken(token_with_context.clone()).into()),
             _ => Err(ErrorKind::CannotParseTokenAsPrefix(token_with_context.clone()).into()),
         }
     }

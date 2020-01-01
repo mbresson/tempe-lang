@@ -53,14 +53,14 @@ pub fn start<R: BufRead, W: Write>(reader: &mut R, writer: &mut W) {
 }
 
 fn write_parser_error<W: Write>(writer: &mut W, error: &ParserError) {
-    let blamed_column = if let ParserError(
-        ParserErrorKind::CannotParseTokenAsPrefix(token_with_context),
-        _,
-    ) = error
-    {
-        token_with_context.context.start_column
-    } else {
-        error.context().end_column
+    let ParserError(error_kind, _) = error;
+
+    let blamed_column = match error_kind {
+        ParserErrorKind::CannotParseTokenAsPrefix(token_with_context)
+        | ParserErrorKind::IllegalToken(token_with_context) => {
+            token_with_context.context.start_column
+        }
+        _ => error.context().end_column,
     };
 
     writeln!(

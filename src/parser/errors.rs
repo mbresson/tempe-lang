@@ -39,6 +39,11 @@ error_chain! {
             description("cannot parse token as prefix")
             display("cannot parse token {:?} as prefix", token_with_context.token)
         }
+
+        IllegalToken(token_with_context: TokenWithContext) {
+            description("illegal token")
+            display("illegal token {:?}", token_with_context.token)
+        }
     }
 }
 
@@ -52,6 +57,7 @@ impl Error {
             Error(ErrorKind::ExpectedExpression(context, _), _) => *context,
             Error(ErrorKind::ExpectedIdentifier(token_found), _) => token_found.context,
             Error(ErrorKind::CannotParseTokenAsPrefix(token_found), _) => token_found.context,
+            Error(ErrorKind::IllegalToken(token), _) => token.context,
             error => unreachable!("error without context: {}", error),
         }
     }

@@ -145,7 +145,7 @@ impl<'a> Lexer<'a> {
         while let Some(current_char) = self.advance_to_next_char() {
             if current_char.is_digit(number_base) {
                 token_buffer.push(current_char);
-            } else if current_char.is_alphabetic() {
+            } else if current_char.is_alphabetic() || current_char == '.' {
                 token_buffer.push(current_char);
 
                 'read_until_end_of_illegal_sequence: loop {
