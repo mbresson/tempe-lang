@@ -57,6 +57,7 @@ fn write_parser_error<W: Write>(writer: &mut W, error: &ParserError) {
 
     let blamed_column = match error_kind {
         ParserErrorKind::CannotParseTokenAsPrefix(token_with_context)
+        | ParserErrorKind::ExpectedSpecificToken(_, token_with_context)
         | ParserErrorKind::IllegalToken(token_with_context) => {
             token_with_context.context.start_column
         }

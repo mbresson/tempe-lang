@@ -60,11 +60,25 @@ impl<'a> Parser<'a> {
 
         match &token_with_context.token {
             Token::Identifier(literal) => {
-                Ok(Expression::Identifier(Identifier::new(literal.clone())))
+                let identifier = Expression::Identifier(Identifier::new(literal.clone()));
+                self.next_token();
+
+                Ok(identifier)
             }
-            Token::Integer(integer) => Ok(Expression::Integer(*integer)),
-            Token::True => Ok(Expression::Boolean(true)),
-            Token::False => Ok(Expression::Boolean(false)),
+            Token::Integer(integer) => {
+                let integer = Expression::Integer(*integer);
+                self.next_token();
+
+                Ok(integer)
+            }
+            Token::True => {
+                self.next_token();
+                Ok(Expression::Boolean(true))
+            }
+            Token::False => {
+                self.next_token();
+                Ok(Expression::Boolean(false))
+            }
             Token::Minus | Token::Bang => self.parse_prefix_expression(),
             Token::OpeningParenthesis => self.parse_grouped_expression(),
             Token::If => self.parse_if_expression(),
@@ -109,7 +123,7 @@ impl<'a> Parser<'a> {
 
             statements.push(statement);
 
-            self.next_token();
+            self.jump_to_next_statement();
         }
 
         if !errors.is_empty() {
@@ -121,8 +135,6 @@ impl<'a> Parser<'a> {
 
     fn parse_expression_statement(&mut self) -> ParsingResult<Statement> {
         let expression = self.parse_expression(Precedence::Lowest);
-
-        self.next_token();
 
         expression.map(Statement::Expression)
     }
@@ -142,8 +154,6 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         let value = self.parse_expression(Precedence::Lowest)?;
-
-        self.next_token();
 
         Ok(Statement::Return(ReturnStatement::new(value)))
     }
@@ -179,24 +189,20 @@ impl<'a> Parser<'a> {
 
         let value = self.parse_expression(Precedence::Lowest)?;
 
-        self.next_token();
-
         Ok(Statement::Let(LetStatement::new(identifier, value)))
     }
 
     fn parse_expression(&mut self, precedence: Precedence) -> ParsingResult<Expression> {
         let mut left_expression = self.parse_prefix()?;
 
-        'parsing_expression: while let Some(following_token) = &self.peek_token {
-            if let Some(operator) = Self::token_to_infix_operator(&following_token.token) {
+        'parsing_expression: while let Some(current_token) = &self.current_token {
+            if let Some(operator) = Self::token_to_infix_operator(&current_token.token) {
                 if Precedence::from(&operator) <= precedence {
                     break 'parsing_expression;
                 }
-            } else if following_token.token != Token::OpeningParenthesis {
+            } else if current_token.token != Token::OpeningParenthesis {
                 break 'parsing_expression;
             }
-
-            self.next_token();
 
             left_expression = self.parse_infix(left_expression)?;
         }
@@ -228,7 +234,7 @@ impl<'a> Parser<'a> {
 
         let expression = self.parse_expression(Precedence::Lowest);
 
-        self.expect_token_or_error(&self.peek_token, Token::ClosingParenthesis)?;
+        self.expect_token_or_error(&self.current_token, Token::ClosingParenthesis)?;
 
         self.next_token();
 
@@ -291,11 +297,12 @@ impl<'a> Parser<'a> {
         let mut arguments = Vec::new();
 
         match self.get_token_or_error(&self.current_token)?.token {
-            Token::ClosingParenthesis => return Ok(arguments),
+            Token::ClosingParenthesis => {
+                self.next_token();
+                return Ok(arguments);
+            }
             _ => arguments.push(self.parse_expression(Precedence::Lowest)?),
         }
-
-        self.next_token();
 
         loop {
             let current_token_is_comma_between_arguments =
@@ -308,11 +315,11 @@ impl<'a> Parser<'a> {
             self.next_token();
 
             arguments.push(self.parse_expression(Precedence::Lowest)?);
-
-            self.next_token();
         }
 
         self.expect_token_or_error(&self.current_token, Token::ClosingParenthesis)?;
+
+        self.next_token();
 
         Ok(arguments)
     }
@@ -372,8 +379,6 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         let condition = self.parse_expression(Precedence::Lowest)?;
-
-        self.next_token();
 
         self.expect_token_or_error(&self.current_token, Token::ClosingParenthesis)?;
 
@@ -787,8 +792,10 @@ mod tests {
             ("1 + (2 + 3) + 4", "((1 + (2 + 3)) + 4);"),
             ("(5 + 5) * 2", "((5 + 5) * 2);"),
             ("2 / (5 + 5)", "(2 / (5 + 5));"),
+            ("-(5) + 1", "((-5) + 1);"),
             ("-(5 + 5)", "(-(5 + 5));"),
             ("!(true == true)", "(!(true == true));"),
+            ("a + fun() + d", "((a + fun()) + d);"),
             ("a + add(b * c) + d", "((a + add((b * c))) + d);"),
             (
                 "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))",
@@ -802,7 +809,6 @@ mod tests {
 
         for (input, expected) in inputs_to_expected {
             let program = parse(input).unwrap();
-
             assert_eq!(format!("{}", program), expected);
         }
     }

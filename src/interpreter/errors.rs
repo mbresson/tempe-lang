@@ -1,7 +1,7 @@
 extern crate error_chain;
 
-use super::Object;
-use crate::representations::ast::{ExpressionOperator, Identifier};
+use super::{FunctionObject, Object};
+use crate::representations::ast::{Expression, ExpressionOperator, Identifier};
 use error_chain::error_chain;
 
 error_chain! {
@@ -24,6 +24,16 @@ error_chain! {
         IdentifierNotFound(identifier: Identifier) {
             description("identifier not found")
             display("identifier {:?} not found", identifier)
+        }
+
+        ExpectedFunction(expression: Expression) {
+            description("expected function")
+            display("expected function, got {:?}", expression)
+        }
+
+        WrongNumberOfArguments(function: FunctionObject, found_arguments: Vec<Expression>) {
+            description("wrong number of arguments provided to function")
+            display("wrong number of arguments provided to function {:?}, got {:?}", function, found_arguments)
         }
     }
 }

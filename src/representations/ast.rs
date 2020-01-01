@@ -2,7 +2,7 @@ use super::token::{keywords, Literal};
 use itertools::Itertools;
 use std::fmt;
 
-#[derive(PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd)]
 pub enum Precedence {
     Lowest = 0,
     Equals,
@@ -53,7 +53,7 @@ impl fmt::Display for Identifier {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
     Identifier(Identifier),
     Integer(i64),
@@ -110,7 +110,7 @@ impl fmt::Display for ExpressionOperator {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PrefixOperationExpression {
     pub prefix_operator: ExpressionOperator,
     pub right_expression: Box<Expression>,
@@ -131,7 +131,7 @@ impl fmt::Display for PrefixOperationExpression {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct InfixOperationExpression {
     pub infix_operator: ExpressionOperator,
     pub left_expression: Box<Expression>,
@@ -162,7 +162,7 @@ impl fmt::Display for InfixOperationExpression {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ConditionalExpression {
     pub condition: Box<Expression>,
     pub consequence: BlockStatement,
@@ -209,10 +209,10 @@ impl fmt::Display for ConditionalExpression {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FunctionExpression {
-    parameters: Vec<Identifier>,
-    body: BlockStatement,
+    pub parameters: Vec<Identifier>,
+    pub body: BlockStatement,
 }
 
 impl FunctionExpression {
@@ -233,10 +233,10 @@ impl fmt::Display for FunctionExpression {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FunctionCallExpression {
-    function: Box<Expression>,
-    arguments: Vec<Expression>,
+    pub function: Box<Expression>,
+    pub arguments: Vec<Expression>,
 }
 
 impl FunctionCallExpression {
@@ -259,7 +259,7 @@ impl fmt::Display for FunctionCallExpression {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Statement {
     Let(LetStatement),
     Return(ReturnStatement),
@@ -276,7 +276,7 @@ impl fmt::Display for Statement {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct LetStatement {
     pub name: Identifier,
     pub value: Expression,
@@ -294,7 +294,7 @@ impl fmt::Display for LetStatement {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ReturnStatement {
     pub value: Expression,
 }
@@ -311,7 +311,7 @@ impl fmt::Display for ReturnStatement {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BlockStatement {
     pub statements: Vec<Statement>,
 }
