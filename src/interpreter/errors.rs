@@ -1,7 +1,7 @@
 extern crate error_chain;
 
 use super::Object;
-use crate::representations::ast::ExpressionOperator;
+use crate::representations::ast::{ExpressionOperator, Identifier};
 use error_chain::error_chain;
 
 error_chain! {
@@ -19,6 +19,11 @@ error_chain! {
         UnknownInfixOperator(operator: ExpressionOperator, left_value: Object, right_value: Object) {
             description("unknown infix operator")
             display("unknown infix operator {:?} {} {:?}", left_value, operator, right_value)
+        }
+
+        IdentifierNotFound(identifier: Identifier) {
+            description("identifier not found")
+            display("identifier {:?} not found", identifier)
         }
     }
 }

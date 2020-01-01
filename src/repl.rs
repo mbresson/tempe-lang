@@ -1,7 +1,7 @@
 use std::io::{BufRead, Write};
 use std::process;
 
-use crate::interpreter::eval_program;
+use crate::interpreter::{eval_program, object::Environment};
 use crate::lexer::Lexer;
 use crate::parser::{
     errors::{Error as ParserError, ErrorKind as ParserErrorKind},
@@ -12,6 +12,8 @@ const PROMPT: &[u8] = b">> ";
 
 pub fn start<R: BufRead, W: Write>(reader: &mut R, writer: &mut W) {
     let mut lines = reader.lines();
+
+    let mut shared_environment = Environment::new();
 
     'repl: loop {
         writer.write_all(PROMPT).unwrap();
@@ -36,7 +38,7 @@ pub fn start<R: BufRead, W: Write>(reader: &mut R, writer: &mut W) {
                 }
             };
 
-            match eval_program(&program) {
+            match eval_program(&program, &mut shared_environment) {
                 Ok(evaluated) => {
                     writeln!(writer, "{}", evaluated).unwrap();
                 }

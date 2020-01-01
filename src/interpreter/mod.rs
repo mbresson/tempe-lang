@@ -1,29 +1,13 @@
 use crate::representations::ast::{
-    ConditionalExpression, Expression, ExpressionOperator, InfixOperationExpression,
+    ConditionalExpression, Expression, ExpressionOperator, Identifier, InfixOperationExpression,
     PrefixOperationExpression, Program, Statement,
 };
-use std::fmt;
-mod errors;
+
+pub mod errors;
+pub mod object;
+
 use errors::{ErrorKind, Result as InterpretingResult};
-
-#[derive(PartialEq, Debug)]
-pub enum Object {
-    Integer(i64),
-    Boolean(bool),
-    EarlyReturnedObject(Box<Object>),
-    Null,
-}
-
-impl fmt::Display for Object {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Object::Integer(value) => write!(f, "{}", value),
-            Object::Boolean(value) => write!(f, "{}", value),
-            Object::EarlyReturnedObject(value) => write!(f, "{}", value),
-            Object::Null => write!(f, "null"),
-        }
-    }
-}
+use object::{Environment, Object};
 
 fn eval_bang_operator_expression(value: Object) -> Object {
     match value {
@@ -119,19 +103,23 @@ fn is_truthy(object: Object) -> bool {
 
 fn eval_conditional_expression(
     conditional_expression: &ConditionalExpression,
+    environment: &mut Environment,
 ) -> InterpretingResult<Object> {
-    let condition = eval_expression(&conditional_expression.condition)?;
+    let condition = eval_expression(&conditional_expression.condition, environment)?;
 
     if is_truthy(condition) {
-        eval_block_statement(&conditional_expression.consequence.statements)
+        eval_block_statement(&conditional_expression.consequence.statements, environment)
     } else if let Some(alternative) = &conditional_expression.alternative {
-        eval_block_statement(&alternative.statements)
+        eval_block_statement(&alternative.statements, environment)
     } else {
         Ok(Object::Null)
     }
 }
 
-fn eval_expression(expression: &Expression) -> InterpretingResult<Object> {
+fn eval_expression(
+    expression: &Expression,
+    environment: &mut Environment,
+) -> InterpretingResult<Object> {
     match expression {
         Expression::Boolean(value) => Ok(Object::Boolean(*value)),
         Expression::Integer(value) => Ok(Object::Integer(*value)),
@@ -139,7 +127,7 @@ fn eval_expression(expression: &Expression) -> InterpretingResult<Object> {
             prefix_operator,
             right_expression,
         }) => {
-            let right_value = eval_expression(right_expression)?;
+            let right_value = eval_expression(right_expression, environment)?;
             eval_prefix_operation(*prefix_operator, right_value)
         }
         Expression::InfixOperation(InfixOperationExpression {
@@ -147,33 +135,55 @@ fn eval_expression(expression: &Expression) -> InterpretingResult<Object> {
             infix_operator,
             right_expression,
         }) => {
-            let left_value = eval_expression(left_expression)?;
-            let right_value = eval_expression(right_expression)?;
+            let left_value = eval_expression(left_expression, environment)?;
+            let right_value = eval_expression(right_expression, environment)?;
             eval_infix_operation(*infix_operator, left_value, right_value)
         }
         Expression::Conditional(conditional_expression) => {
-            eval_conditional_expression(conditional_expression)
+            eval_conditional_expression(conditional_expression, environment)
         }
+        Expression::Identifier(identifier) => eval_identifier(&identifier, environment),
         expression => todo!("expression evaluation for {}", expression),
     }
 }
 
-fn eval_statement(statement: &Statement) -> InterpretingResult<Object> {
-    match statement {
-        Statement::Expression(expression) => eval_expression(expression),
-        Statement::Return(return_statement) => {
-            let value = eval_expression(&return_statement.value)?;
-            Ok(Object::EarlyReturnedObject(Box::new(value)))
-        }
-        _ => todo!("statement evaluation for {}", statement),
+fn eval_identifier(
+    identifier: &Identifier,
+    environment: &Environment,
+) -> InterpretingResult<Object> {
+    match environment.get(identifier) {
+        Some(value) => Ok(value.clone()),
+        None => Err(ErrorKind::IdentifierNotFound(identifier.clone()).into()),
     }
 }
 
-pub fn eval_block_statement(statements: &[Statement]) -> InterpretingResult<Object> {
+fn eval_statement(
+    statement: &Statement,
+    environment: &mut Environment,
+) -> InterpretingResult<Object> {
+    match statement {
+        Statement::Expression(expression) => eval_expression(expression, environment),
+        Statement::Return(return_statement) => {
+            let value = eval_expression(&return_statement.value, environment)?;
+            Ok(Object::EarlyReturnedObject(Box::new(value)))
+        }
+        Statement::Let(let_statement) => {
+            let value = eval_expression(&let_statement.value, environment)?;
+
+            environment.set(let_statement.name.clone(), value.clone());
+            Ok(value)
+        }
+    }
+}
+
+pub fn eval_block_statement(
+    statements: &[Statement],
+    environment: &mut Environment,
+) -> InterpretingResult<Object> {
     let mut result = Object::Null;
 
     for statement in statements {
-        result = eval_statement(statement)?;
+        result = eval_statement(statement, environment)?;
 
         if let Object::EarlyReturnedObject(_) = result {
             break;
@@ -183,22 +193,26 @@ pub fn eval_block_statement(statements: &[Statement]) -> InterpretingResult<Obje
     Ok(result)
 }
 
-pub fn eval_program(program: &Program) -> InterpretingResult<Object> {
-    Ok(match eval_block_statement(&program.statements)? {
-        Object::EarlyReturnedObject(value) => *value,
-        value => value,
-    })
+pub fn eval_program(
+    program: &Program,
+    environment: &mut Environment,
+) -> InterpretingResult<Object> {
+    Ok(
+        match eval_block_statement(&program.statements, environment)? {
+            Object::EarlyReturnedObject(value) => *value,
+            value => value,
+        },
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::errors::{ErrorKind, Result as InterpretingResult};
-    use super::{eval_statement, Object};
+    use super::{Environment, Object};
     use crate::lexer::Lexer;
     use crate::parser::Parser;
-    use crate::representations::ast::{
-        Expression, ExpressionOperator, PrefixOperationExpression, Statement,
-    };
+    use crate::representations::ast::{ExpressionOperator, Identifier};
+    use crate::representations::token::Literal;
 
     fn parse_eval(input: &str) -> InterpretingResult<Object> {
         let mut lexer = Lexer::new(input);
@@ -207,7 +221,9 @@ mod tests {
             .parse_program()
             .map_err(|errors| format!("parse_program returned errors {:?}", errors))?;
 
-        super::eval_program(&program)
+        let mut environment = Environment::new();
+
+        super::eval_program(&program, &mut environment)
     }
 
     #[test]
@@ -261,39 +277,23 @@ mod tests {
     }
 
     #[test]
-    fn eval_integer_expression() {
-        let statements_to_expected_objects = vec![
-            (
-                Statement::Expression(Expression::Integer(42)),
-                Object::Integer(42),
-            ),
-            (
-                Statement::Expression(Expression::Integer(-1)),
-                Object::Integer(-1),
-            ),
-            (
-                Statement::Expression(Expression::PrefixOperation(PrefixOperationExpression {
-                    prefix_operator: ExpressionOperator::Minus,
-                    right_expression: Box::new(Expression::Integer(4)),
-                })),
-                Object::Integer(-4),
-            ),
-            (
-                Statement::Expression(Expression::PrefixOperation(PrefixOperationExpression {
-                    prefix_operator: ExpressionOperator::Minus,
-                    right_expression: Box::new(Expression::Integer(-4)),
-                })),
-                Object::Integer(4),
-            ),
+    fn eval_integer_expressions() {
+        let inputs_to_expected_objects = vec![
+            ("42", Object::Integer(42)),
+            ("-1", Object::Integer(-1)),
+            ("-4", Object::Integer(-4)),
+            ("--4", Object::Integer(4)),
         ];
 
-        for (statement, expected_object) in statements_to_expected_objects {
-            assert_eq!(eval_statement(&statement).unwrap(), expected_object);
+        for (input, expected_object) in inputs_to_expected_objects {
+            let object = parse_eval(input).unwrap();
+
+            assert_eq!(object, expected_object);
         }
     }
 
     #[test]
-    fn eval_boolean_expression() {
+    fn eval_boolean_expressions() {
         let inputs_to_expected_objects = vec![
             ("benar", Object::Boolean(true)),
             ("salah", Object::Boolean(false)),
@@ -316,50 +316,23 @@ mod tests {
     }
 
     #[test]
-    fn eval_bang_operator() {
-        let statements_to_expected_objects = vec![
-            (
-                Statement::Expression(Expression::PrefixOperation(PrefixOperationExpression {
-                    prefix_operator: ExpressionOperator::Bang,
-                    right_expression: Box::new(Expression::Boolean(true)),
-                })),
-                Object::Boolean(false),
-            ),
-            (
-                Statement::Expression(Expression::PrefixOperation(PrefixOperationExpression {
-                    prefix_operator: ExpressionOperator::Bang,
-                    right_expression: Box::new(Expression::Boolean(false)),
-                })),
-                Object::Boolean(true),
-            ),
-            (
-                Statement::Expression(Expression::PrefixOperation(PrefixOperationExpression {
-                    prefix_operator: ExpressionOperator::Bang,
-                    right_expression: Box::new(Expression::Integer(2)),
-                })),
-                Object::Boolean(false),
-            ),
-            (
-                Statement::Expression(Expression::PrefixOperation(PrefixOperationExpression {
-                    prefix_operator: ExpressionOperator::Bang,
-                    right_expression: Box::new(Expression::PrefixOperation(
-                        PrefixOperationExpression {
-                            prefix_operator: ExpressionOperator::Bang,
-                            right_expression: Box::new(Expression::Boolean(true)),
-                        },
-                    )),
-                })),
-                Object::Boolean(true),
-            ),
+    fn eval_bang_operators() {
+        let inputs_to_expected_objects = vec![
+            ("!benar", Object::Boolean(false)),
+            ("!salah", Object::Boolean(true)),
+            ("!2", Object::Boolean(false)),
+            ("!!benar", Object::Boolean(true)),
         ];
 
-        for (statement, expected_object) in statements_to_expected_objects {
-            assert_eq!(eval_statement(&statement).unwrap(), expected_object);
+        for (input, expected_object) in inputs_to_expected_objects {
+            let object = parse_eval(input).unwrap();
+
+            assert_eq!(object, expected_object);
         }
     }
 
     #[test]
-    fn eval_return_statement() {
+    fn eval_return_statements() {
         let inputs_to_expected_objects = vec![
             ("kembalikan 10;", Object::Integer(10)),
             ("kembalikan 10; 9;", Object::Integer(10)),
@@ -441,12 +414,37 @@ mod tests {
                     Object::Boolean(false),
                 ),
             ),
+            (
+                "hahasiapakamu",
+                ErrorKind::IdentifierNotFound(Identifier::new(Literal(
+                    "hahasiapakamu".to_string(),
+                ))),
+            ),
         ];
 
         for (input, expected_error) in inputs_to_expected_errors {
             let error = parse_eval(input).unwrap_err();
 
             assert_eq!(error.description(), expected_error.description());
+        }
+    }
+
+    #[test]
+    fn eval_let_statements() {
+        let inputs_to_expected_objects = vec![
+            ("diketahui a = 5; a;", Object::Integer(5)),
+            ("diketahui a = 5 * 5; a;", Object::Integer(25)),
+            ("diketahui a = 5; diketahui b = a; b;", Object::Integer(5)),
+            (
+                "diketahui a = 5; diketahui b = a; diketahui c = a + b + 5; c;",
+                Object::Integer(15),
+            ),
+        ];
+
+        for (input, expected_object) in inputs_to_expected_objects {
+            let object = parse_eval(input).unwrap();
+
+            assert_eq!(object, expected_object);
         }
     }
 }

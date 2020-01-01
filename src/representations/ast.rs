@@ -36,9 +36,9 @@ impl fmt::Display for Program {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Identifier {
-    value: Literal,
+    pub value: Literal,
 }
 
 impl Identifier {
@@ -278,8 +278,8 @@ impl fmt::Display for Statement {
 
 #[derive(Debug, PartialEq)]
 pub struct LetStatement {
-    name: Identifier,
-    value: Expression,
+    pub name: Identifier,
+    pub value: Expression,
 }
 
 impl LetStatement {
