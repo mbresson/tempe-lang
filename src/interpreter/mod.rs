@@ -80,6 +80,24 @@ fn eval_boolean_infix_operation(
     }
 }
 
+fn eval_str_infix_operation(
+    operator: ExpressionOperator,
+    left_value: &str,
+    right_value: &str,
+) -> InterpretingResult<Object> {
+    match operator {
+        ExpressionOperator::Plus => Ok(Object::Str(format!("{}{}", left_value, right_value))),
+        ExpressionOperator::Equal => Ok(Object::Boolean(left_value == right_value)),
+        ExpressionOperator::NotEqual => Ok(Object::Boolean(left_value != right_value)),
+        _ => Err(ErrorKind::UnknownInfixOperator(
+            operator,
+            Object::Str(left_value.to_string()),
+            Object::Str(right_value.to_string()),
+        )
+        .into()),
+    }
+}
+
 fn eval_infix_operation(
     operator: ExpressionOperator,
     left_value: Object,
@@ -91,6 +109,9 @@ fn eval_infix_operation(
         }
         (Object::Boolean(left_bool), Object::Boolean(right_bool)) => {
             eval_boolean_infix_operation(operator, left_bool, right_bool)
+        }
+        (Object::Str(left_str), Object::Str(right_str)) => {
+            eval_str_infix_operation(operator, &left_str, &right_str)
         }
         (left_value, right_value) => {
             Err(ErrorKind::UnknownInfixOperator(operator, left_value, right_value).into())
@@ -347,6 +368,10 @@ mod tests {
             ("1 != 1", Object::Boolean(false)),
             ("1 == 2", Object::Boolean(false)),
             ("1 != 2", Object::Boolean(true)),
+            (
+                "\"hello\" + \" \" + \"world\"",
+                Object::Str("hello world".to_string()),
+            ),
         ];
 
         for (input, expected_object) in inputs_to_expected_objects {
@@ -490,6 +515,14 @@ mod tests {
                     ExpressionOperator::Plus,
                     Object::Boolean(true),
                     Object::Boolean(false),
+                ),
+            ),
+            (
+                "\"hello\" - \"world\"",
+                ErrorKind::UnknownInfixOperator(
+                    ExpressionOperator::Minus,
+                    Object::Str("hello".to_string()),
+                    Object::Str("world".to_string()),
                 ),
             ),
             (
