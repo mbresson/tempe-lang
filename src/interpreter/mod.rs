@@ -92,7 +92,9 @@ fn eval_infix_operation(
         (Object::Boolean(left_bool), Object::Boolean(right_bool)) => {
             eval_boolean_infix_operation(operator, left_bool, right_bool)
         }
-        (left_value, right_value) => Err(ErrorKind::TypeMismatch(left_value, right_value).into()),
+        (left_value, right_value) => {
+            Err(ErrorKind::UnknownInfixOperator(operator, left_value, right_value).into())
+        }
     }
 }
 
@@ -456,11 +458,19 @@ mod tests {
         let inputs_to_expected_errors = vec![
             (
                 "5 + benar;",
-                ErrorKind::TypeMismatch(Object::Integer(5), Object::Boolean(true)),
+                ErrorKind::UnknownInfixOperator(
+                    ExpressionOperator::Plus,
+                    Object::Integer(5),
+                    Object::Boolean(true),
+                ),
             ),
             (
                 "5 + benar; 5;",
-                ErrorKind::TypeMismatch(Object::Integer(5), Object::Boolean(true)),
+                ErrorKind::UnknownInfixOperator(
+                    ExpressionOperator::Plus,
+                    Object::Integer(5),
+                    Object::Boolean(true),
+                ),
             ),
             (
                 "-benar;",

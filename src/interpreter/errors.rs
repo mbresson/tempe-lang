@@ -6,11 +6,6 @@ use error_chain::error_chain;
 
 error_chain! {
     errors {
-        TypeMismatch(left_object: Object, right_object: Object) {
-            description("type mismatch")
-            display("type mismatch between {:?} and {:?}", left_object, right_object)
-        }
-
         UnknownPrefixOperator(operator: ExpressionOperator, right_value: Object) {
             description("unknown prefix operator")
             display("unknown prefix operator {} {:?}", operator, right_value)
