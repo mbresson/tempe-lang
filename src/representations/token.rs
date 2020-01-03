@@ -15,6 +15,7 @@ pub enum Token {
 
     Identifier(Literal),
     Integer(i64),
+    Str(String),
 
     // ----- keywords -----
     Function,

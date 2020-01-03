@@ -121,6 +121,7 @@ fn eval_expression(expression: &Expression, env: &mut Environment) -> Interpreti
     match expression {
         Expression::Boolean(value) => Ok(Object::Boolean(*value)),
         Expression::Integer(value) => Ok(Object::Integer(*value)),
+        Expression::Str(string) => Ok(Object::Str(string.clone())),
         Expression::PrefixOperation(PrefixOperationExpression {
             prefix_operator,
             right_expression,
@@ -360,6 +361,20 @@ mod tests {
             ("-1", Object::Integer(-1)),
             ("-4", Object::Integer(-4)),
             ("--4", Object::Integer(4)),
+        ];
+
+        for (input, expected_object) in inputs_to_expected_objects {
+            let object = parse_eval(input).unwrap();
+
+            assert_eq!(object, expected_object);
+        }
+    }
+
+    #[test]
+    fn eval_str_expressions() {
+        let inputs_to_expected_objects = vec![
+            ("\"Hello world!\"", Object::Str("Hello world!".to_string())),
+            ("\"\\\"\"", Object::Str("\"".to_string())),
         ];
 
         for (input, expected_object) in inputs_to_expected_objects {

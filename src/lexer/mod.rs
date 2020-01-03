@@ -110,6 +110,40 @@ impl<'a> Lexer<'a> {
         Self::parse_identifier_or_keyword(&token_buffer)
     }
 
+    fn read_str(&mut self) -> Token {
+        let mut token_buffer = String::new();
+
+        let mut is_escaped_character = false;
+
+        // read following characters until a closing '"' character
+        while let Some(current_char) = self.advance_to_next_char() {
+            if is_escaped_character {
+                token_buffer.push(current_char);
+                is_escaped_character = false;
+                continue;
+            }
+
+            match current_char {
+                '"' => {
+                    self.advance_to_next_char();
+                    return Token::Str(token_buffer);
+                }
+                '\\' => {
+                    is_escaped_character = true;
+                }
+                _ => {
+                    token_buffer.push(current_char);
+                }
+            }
+        }
+
+        // or until no more char can be read (EOF)
+        self.current_char = None;
+
+        // the string was not terminated by a '"', so it's an illegal token
+        Token::Illegal(Literal(format!("\"{}", token_buffer)))
+    }
+
     fn parse_base_10_integer(literal: &str) -> Token {
         match literal.parse::<i64>() {
             Ok(integer) => Token::Integer(integer),
@@ -314,6 +348,8 @@ impl<'a> Lexer<'a> {
             self.read_identifier_or_keyword(current_char)
         } else if current_char.is_ascii_digit() {
             self.read_integer(current_char)
+        } else if current_char == '"' {
+            self.read_str()
         } else {
             self.read_special_symbol(current_char)
         };
@@ -376,6 +412,7 @@ mod tests {
             10 == 10;
             10 != 9;
 
+            \"哈囉！สวัสดีครับ \\\"Salam!\\\" привет!\"
         ";
 
         let expected_tokens = vec![
@@ -490,20 +527,18 @@ mod tests {
             Token::NotEqual,
             Token::Integer(9),
             Token::Semicolon,
+            //
+            // "哈囉！สวัสดีครับ \"Salam!\"" привет!"
+            Token::Str("哈囉！สวัสดีครับ \"Salam!\" привет!".to_string()),
         ];
 
-        let mut lexer = super::Lexer::new(input);
+        let lexer = super::Lexer::new(input);
 
-        for expected_token in expected_tokens {
-            match lexer.next() {
-                Some(TokenWithContext { token, .. }) => {
-                    assert_eq!(token, expected_token);
-                }
-                None => {
-                    panic!("Expected to get a token");
-                }
-            }
-        }
+        let tokens = lexer
+            .map(|TokenWithContext { token, .. }| token)
+            .collect::<Vec<Token>>();
+
+        assert_eq!(tokens, expected_tokens);
     }
 
     #[test]

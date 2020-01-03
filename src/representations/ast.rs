@@ -57,6 +57,7 @@ impl fmt::Display for Identifier {
 pub enum Expression {
     Identifier(Identifier),
     Integer(i64),
+    Str(String),
     Boolean(bool),
     PrefixOperation(PrefixOperationExpression),
     InfixOperation(InfixOperationExpression),
@@ -71,6 +72,7 @@ impl fmt::Display for Expression {
             Self::Boolean(true) => write!(f, "{}", keywords::TRUE),
             Self::Boolean(false) => write!(f, "{}", keywords::FALSE),
             Self::Integer(val) => write!(f, "{}", val),
+            Self::Str(string) => write!(f, "\"{}\"", string),
             Self::PrefixOperation(expression) => write!(f, "{}", expression),
             Self::InfixOperation(expression) => write!(f, "{}", expression),
             Self::Identifier(identifier) => write!(f, "{}", identifier),

@@ -79,6 +79,13 @@ impl<'a> Parser<'a> {
                 self.next_token();
                 Ok(Expression::Boolean(false))
             }
+            Token::Str(string) => {
+                let string = Expression::Str(string.clone());
+
+                self.next_token();
+
+                Ok(string)
+            }
             Token::Minus | Token::Bang => self.parse_prefix_expression(),
             Token::OpeningParenthesis => self.parse_grouped_expression(),
             Token::If => self.parse_if_expression(),
@@ -123,7 +130,14 @@ impl<'a> Parser<'a> {
 
             statements.push(statement);
 
-            self.jump_to_next_statement();
+            if let Some(token_with_context) = &self.current_token {
+                if token_with_context.token == Token::Semicolon {
+                    self.next_token();
+                } else {
+                    errors.push(ErrorKind::IllegalToken(token_with_context.clone()).into());
+                    self.jump_to_next_statement();
+                }
+            }
         }
 
         if !errors.is_empty() {
@@ -623,6 +637,27 @@ mod tests {
         let expected_expressions = vec![
             Statement::Expression(Expression::Integer(42)),
             Statement::Expression(Expression::Integer(52)),
+        ];
+
+        assert_eq!(program.statements, expected_expressions);
+    }
+
+    #[test]
+    fn str_expressions() {
+        let input = "
+            \"selamat makan!!! tempe itu enak :) \";
+            \"a string with an escaped double quote: \\\" (it's getting tricky!)\"
+        ";
+
+        let program = parse(input).unwrap();
+
+        let expected_expressions = vec![
+            Statement::Expression(Expression::Str(
+                "selamat makan!!! tempe itu enak :) ".to_string(),
+            )),
+            Statement::Expression(Expression::Str(
+                "a string with an escaped double quote: \" (it's getting tricky!)".to_string(),
+            )),
         ];
 
         assert_eq!(program.statements, expected_expressions);
