@@ -4,11 +4,12 @@ use crate::representations::ast::{
     Statement,
 };
 
+mod builtins;
 pub mod errors;
 pub mod object;
 
 use errors::{ErrorKind, Result as InterpretingResult};
-use object::{Environment, FunctionObject, Object};
+use object::{BuiltinFunctionObject, Environment, FunctionObject, Object};
 
 fn eval_bang_operator_expression(value: Object) -> Object {
     match value {
@@ -174,6 +175,14 @@ fn eval_function_call(
     call: &FunctionCallExpression,
     env: &mut Environment,
 ) -> InterpretingResult<Object> {
+    let mut arguments = Vec::new();
+
+    for unevaluated_argument in &call.arguments {
+        let argument = eval_expression(unevaluated_argument, env)?;
+
+        arguments.push(argument);
+    }
+
     let function = match call.function.as_ref() {
         Expression::Function(function_expression) => {
             // direct function definition and call
@@ -183,8 +192,16 @@ fn eval_function_call(
         Expression::Identifier(identifier) => {
             // calling a previously defined function
             // e.g. myFunction(arg1, arg2)
-            if let Object::Function(function) = eval_identifier(identifier, env)? {
+
+            let maybe_function = eval_identifier(identifier, env)?;
+
+            if let Object::Function(function) = maybe_function {
                 function
+            } else if let Object::BuiltinFunction(BuiltinFunctionObject {
+                implementation, ..
+            }) = maybe_function
+            {
+                return implementation(arguments);
             } else {
                 return Err(ErrorKind::IdentifierNotFound(identifier.clone()).into());
             }
@@ -203,14 +220,18 @@ fn eval_function_call(
         expression => return Err(ErrorKind::ExpectedFunction(expression.clone()).into()),
     };
 
-    if function.parameters.len() != call.arguments.len() {
-        return Err(ErrorKind::WrongNumberOfArguments(*function, call.arguments.clone()).into());
+    if function.parameters.len() != arguments.len() {
+        return Err(ErrorKind::WrongNumberOfArguments(
+            function.name,
+            function.parameters.len(),
+            arguments.len(),
+        )
+        .into());
     }
 
     let mut execution_env = function.env.clone();
 
-    for (argument_index, unevaluated_argument) in call.arguments.iter().enumerate() {
-        let argument = eval_expression(unevaluated_argument, env)?;
+    for (argument_index, argument) in arguments.into_iter().enumerate() {
         let argument_name = function.parameters[argument_index].clone();
 
         execution_env.set(argument_name, argument);
@@ -670,6 +691,20 @@ mod tests {
                 ",
                 Object::Integer(4),
             ),
+        ];
+
+        for (input, expected_object) in inputs_to_expected_objects {
+            let object = parse_eval(input).unwrap();
+
+            assert_eq!(object, expected_object);
+        }
+    }
+
+    #[test]
+    fn eval_builtin_function_call() {
+        let inputs_to_expected_objects = vec![
+            ("panjang(\"salam!\")", Object::Integer(6)),
+            ("panjang(\"你好！\")", Object::Integer(3)),
         ];
 
         for (input, expected_object) in inputs_to_expected_objects {

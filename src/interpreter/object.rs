@@ -2,6 +2,7 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use std::fmt;
 
+use super::builtins::{builtins_map, BuiltinFn};
 use crate::representations::{
     ast::{BlockStatement, Identifier},
     token::keywords,
@@ -13,6 +14,7 @@ pub enum Object {
     Boolean(bool),
     Str(String),
     Function(Box<FunctionObject>), // Box<...> is required to support function recursion, c.f. interpreter code
+    BuiltinFunction(BuiltinFunctionObject),
     EarlyReturnedObject(Box<Object>),
     Null,
 }
@@ -29,10 +31,22 @@ impl fmt::Display for Object {
                 keywords::FUNCTION,
                 function.parameters.iter().format(", "),
             ),
+            Object::BuiltinFunction(function) => write!(
+                f,
+                "{}({}) {{ ... }}",
+                keywords::FUNCTION,
+                function.parameters.iter().format(", "),
+            ),
             Object::EarlyReturnedObject(value) => write!(f, "{}", value),
             Object::Null => write!(f, "null"),
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct BuiltinFunctionObject {
+    pub parameters: Vec<Identifier>,
+    pub implementation: Box<BuiltinFn>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -64,10 +78,25 @@ pub struct Environment {
 }
 
 impl Environment {
-    pub fn new() -> Self {
+    fn with_builtin_functions() -> Self {
         Self {
-            variables: HashMap::new(),
+            variables: builtins_map()
+                .into_iter()
+                .map(|(identifier, (parameters, function))| {
+                    (
+                        identifier,
+                        Object::BuiltinFunction(BuiltinFunctionObject {
+                            parameters,
+                            implementation: function,
+                        }),
+                    )
+                })
+                .collect(),
         }
+    }
+
+    pub fn new() -> Self {
+        Self::with_builtin_functions()
     }
 
     pub fn get(&self, key: &Identifier) -> Option<&Object> {

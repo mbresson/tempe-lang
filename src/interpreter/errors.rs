@@ -1,8 +1,15 @@
 extern crate error_chain;
 
-use super::{FunctionObject, Object};
+use super::Object;
 use crate::representations::ast::{Expression, ExpressionOperator, Identifier};
+use crate::representations::token::Literal;
 use error_chain::error_chain;
+
+fn function_name_or_anonymous(function_name: &Option<Identifier>) -> Identifier {
+    function_name
+        .clone()
+        .unwrap_or_else(|| Identifier::new(Literal("anonymous".to_string())))
+}
 
 error_chain! {
     errors {
@@ -26,9 +33,15 @@ error_chain! {
             display("expected function, got {:?}", expression)
         }
 
-        WrongNumberOfArguments(function: FunctionObject, found_arguments: Vec<Expression>) {
+        WrongNumberOfArguments(function: Option<Identifier>, expected: usize, received: usize) {
             description("wrong number of arguments provided to function")
-            display("wrong number of arguments provided to function {:?}, got {:?}", function, found_arguments)
+            display(
+                "wrong number of arguments provided to function {:?}, expected {}, received {}", function_name_or_anonymous(function), expected, received)
+        }
+
+        WrongArgumentType(function: Option<Identifier>, argument: Object, expected: String) {
+            description("wrong argument type provided to function")
+            display("wrong argument type provided to function {:?}, expected {}, got {:?}", function_name_or_anonymous(function), expected, argument)
         }
     }
 }
