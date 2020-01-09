@@ -10,6 +10,7 @@ pub enum Precedence {
     Sum,
     Product,
     Prefix,
+    Index,
 }
 
 impl From<&ExpressionOperator> for Precedence {
@@ -22,6 +23,7 @@ impl From<&ExpressionOperator> for Precedence {
             ExpressionOperator::GreaterThan | ExpressionOperator::LessThan => {
                 Precedence::LessOrGreater
             }
+            ExpressionOperator::Indexer => Precedence::Index,
         }
     }
 }
@@ -59,6 +61,8 @@ pub enum Expression {
     Integer(i64),
     Str(String),
     Boolean(bool),
+    Array(Vec<Expression>),
+    IndexOperation(IndexOperationExpression),
     PrefixOperation(PrefixOperationExpression),
     InfixOperation(InfixOperationExpression),
     Conditional(ConditionalExpression),
@@ -71,8 +75,10 @@ impl fmt::Display for Expression {
         match self {
             Self::Boolean(true) => write!(f, "{}", keywords::TRUE),
             Self::Boolean(false) => write!(f, "{}", keywords::FALSE),
+            Self::Array(array) => write!(f, "[{}]", array.iter().format(", ")),
             Self::Integer(val) => write!(f, "{}", val),
             Self::Str(string) => write!(f, "\"{}\"", string),
+            Self::IndexOperation(expression) => write!(f, "{}", expression),
             Self::PrefixOperation(expression) => write!(f, "{}", expression),
             Self::InfixOperation(expression) => write!(f, "{}", expression),
             Self::Identifier(identifier) => write!(f, "{}", identifier),
@@ -94,6 +100,7 @@ pub enum ExpressionOperator {
     LessThan,
     Equal,
     NotEqual,
+    Indexer,
 }
 
 impl fmt::Display for ExpressionOperator {
@@ -108,6 +115,7 @@ impl fmt::Display for ExpressionOperator {
             Self::LessThan => write!(f, "<"),
             Self::Equal => write!(f, "=="),
             Self::NotEqual => write!(f, "!="),
+            Self::Indexer => write!(f, "[]"),
         }
     }
 }
@@ -130,6 +138,27 @@ impl PrefixOperationExpression {
 impl fmt::Display for PrefixOperationExpression {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({}{})", self.prefix_operator, self.right_expression)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct IndexOperationExpression {
+    pub index: Box<Expression>,
+    pub left_expression: Box<Expression>,
+}
+
+impl IndexOperationExpression {
+    pub fn new(index: Expression, left_expression: Expression) -> Self {
+        Self {
+            index: Box::new(index),
+            left_expression: Box::new(left_expression),
+        }
+    }
+}
+
+impl fmt::Display for IndexOperationExpression {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}[{}]", self.index, self.left_expression)
     }
 }
 

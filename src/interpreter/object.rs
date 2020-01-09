@@ -13,6 +13,7 @@ pub enum Object {
     Integer(i64),
     Boolean(bool),
     Str(String),
+    Array(Vec<Object>),
     Function(Box<FunctionObject>), // Box<...> is required to support function recursion, c.f. interpreter code
     BuiltinFunction(BuiltinFunctionObject),
     EarlyReturnedObject(Box<Object>),
@@ -22,23 +23,24 @@ pub enum Object {
 impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Object::Integer(value) => write!(f, "{}", value),
-            Object::Boolean(value) => write!(f, "{}", value),
-            Object::Str(string) => write!(f, "\"{}\"", string.replace("\"", "\\\"")),
-            Object::Function(function) => write!(
+            Self::Integer(value) => write!(f, "{}", value),
+            Self::Boolean(value) => write!(f, "{}", value),
+            Self::Str(string) => write!(f, "\"{}\"", string.replace("\"", "\\\"")),
+            Self::Array(array) => write!(f, "[{}]", array.iter().format(", ")),
+            Self::Function(function) => write!(
                 f,
                 "{}({}) {{ ... }}",
                 keywords::FUNCTION,
                 function.parameters.iter().format(", "),
             ),
-            Object::BuiltinFunction(function) => write!(
+            Self::BuiltinFunction(function) => write!(
                 f,
                 "{}({}) {{ ... }}",
                 keywords::FUNCTION,
                 function.parameters.iter().format(", "),
             ),
-            Object::EarlyReturnedObject(value) => write!(f, "{}", value),
-            Object::Null => write!(f, "null"),
+            Self::EarlyReturnedObject(value) => write!(f, "{}", value),
+            Self::Null => write!(f, "null"),
         }
     }
 }

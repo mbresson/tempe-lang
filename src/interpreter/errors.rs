@@ -2,13 +2,15 @@ extern crate error_chain;
 
 use super::Object;
 use crate::representations::ast::{Expression, ExpressionOperator, Identifier};
-use crate::representations::token::Literal;
 use error_chain::error_chain;
+use itertools::Itertools;
 
-fn function_name_or_anonymous(function_name: &Option<Identifier>) -> Identifier {
-    function_name
-        .clone()
-        .unwrap_or_else(|| Identifier::new(Literal("anonymous".to_string())))
+fn function_name_or_anonymous(function_name: &Option<Identifier>) -> &str {
+    if let Some(name) = function_name {
+        &name.value.0
+    } else {
+        "anonymous"
+    }
 }
 
 error_chain! {
@@ -21,6 +23,16 @@ error_chain! {
         UnknownInfixOperator(operator: ExpressionOperator, left_value: Object, right_value: Object) {
             description("unknown infix operator")
             display("unknown infix operator {:?} {} {:?}", left_value, operator, right_value)
+        }
+
+        UnknownIndexOperator(index: Object, left_value: Object) {
+            description("unknown index operator")
+            display("unknown index operator {:?} for {:?}", index, left_value)
+        }
+
+        OutOfBoundsArrayIndex(array: Vec<Object>, index: i64) {
+            description("out of bounds array index")
+            display("out of bounds array index {} for array [{}]", index, array.iter().format(", "))
         }
 
         IdentifierNotFound(identifier: Identifier) {
@@ -36,12 +48,17 @@ error_chain! {
         WrongNumberOfArguments(function: Option<Identifier>, expected: usize, received: usize) {
             description("wrong number of arguments provided to function")
             display(
-                "wrong number of arguments provided to function {:?}, expected {}, received {}", function_name_or_anonymous(function), expected, received)
+                "wrong number of arguments provided to function {:?}, expected {}, received {}",
+                function_name_or_anonymous(function), expected, received
+            )
         }
 
-        WrongArgumentType(function: Option<Identifier>, argument: Object, expected: String) {
+        WrongArgumentType(function: Option<Identifier>, argument: Object, expected_types: Vec<&'static str>) {
             description("wrong argument type provided to function")
-            display("wrong argument type provided to function {:?}, expected {}, got {:?}", function_name_or_anonymous(function), expected, argument)
+            display(
+                "wrong argument type provided to function {:?}, expected {}, got {:?}",
+                function_name_or_anonymous(function), expected_types.iter().format(" | "), argument
+            )
         }
     }
 }

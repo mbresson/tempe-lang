@@ -46,6 +46,8 @@ pub enum Token {
     ClosingParenthesis,
     OpeningBrace,
     ClosingBrace,
+    OpeningBracket,
+    ClosingBracket,
 }
 
 #[derive(Clone, Copy, Debug)]

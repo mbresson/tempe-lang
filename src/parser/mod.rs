@@ -1,7 +1,7 @@
 use crate::representations::ast::{
     BlockStatement, ConditionalExpression, Expression, ExpressionOperator, FunctionCallExpression,
-    FunctionExpression, Identifier, InfixOperationExpression, LetStatement, Precedence,
-    PrefixOperationExpression, Program, ReturnStatement, Statement,
+    FunctionExpression, Identifier, IndexOperationExpression, InfixOperationExpression,
+    LetStatement, Precedence, PrefixOperationExpression, Program, ReturnStatement, Statement,
 };
 use crate::representations::token::{Context, Token, TokenWithContext};
 use std::vec::Vec;
@@ -50,6 +50,7 @@ impl<'a> Parser<'a> {
             | Token::NotEqual
             | Token::LessThan
             | Token::GreaterThan => self.parse_infix_expression(left_expression),
+            Token::OpeningBracket => self.parse_index_expression(left_expression),
             Token::OpeningParenthesis => self.parse_function_call_expression(left_expression),
             _ => Err(ErrorKind::ExpectedInfixOperator(token_with_context.clone()).into()),
         }
@@ -86,6 +87,7 @@ impl<'a> Parser<'a> {
 
                 Ok(string)
             }
+            Token::OpeningBracket => self.parse_array_expression(),
             Token::Minus | Token::Bang => self.parse_prefix_expression(),
             Token::OpeningParenthesis => self.parse_grouped_expression(),
             Token::If => self.parse_if_expression(),
@@ -265,6 +267,7 @@ impl<'a> Parser<'a> {
             Token::NotEqual => Some(ExpressionOperator::NotEqual),
             Token::LessThan => Some(ExpressionOperator::LessThan),
             Token::GreaterThan => Some(ExpressionOperator::GreaterThan),
+            Token::OpeningBracket => Some(ExpressionOperator::Indexer),
             _ => None,
         }
     }
@@ -307,35 +310,16 @@ impl<'a> Parser<'a> {
         )))
     }
 
-    fn parse_function_call_arguments(&mut self) -> ParsingResult<Vec<Expression>> {
-        let mut arguments = Vec::new();
-
-        match self.get_token_or_error(&self.current_token)?.token {
-            Token::ClosingParenthesis => {
-                self.next_token();
-                return Ok(arguments);
-            }
-            _ => arguments.push(self.parse_expression(Precedence::Lowest)?),
-        }
-
-        loop {
-            let current_token_is_comma_between_arguments =
-                Self::is_token(&self.current_token, Token::Comma);
-
-            if !current_token_is_comma_between_arguments {
-                break;
-            }
-
-            self.next_token();
-
-            arguments.push(self.parse_expression(Precedence::Lowest)?);
-        }
-
-        self.expect_token_or_error(&self.current_token, Token::ClosingParenthesis)?;
-
+    fn parse_array_expression(&mut self) -> ParsingResult<Expression> {
         self.next_token();
 
-        Ok(arguments)
+        Ok(Expression::Array(
+            self.parse_comma_separated_expression_list(Token::ClosingBracket)?,
+        ))
+    }
+
+    fn parse_function_call_arguments(&mut self) -> ParsingResult<Vec<Expression>> {
+        self.parse_comma_separated_expression_list(Token::ClosingParenthesis)
     }
 
     fn parse_function_expression_parameters(&mut self) -> ParsingResult<Vec<Identifier>> {
@@ -383,6 +367,40 @@ impl<'a> Parser<'a> {
         self.expect_token_or_error(&self.current_token, Token::ClosingParenthesis)?;
 
         Ok(identifiers)
+    }
+
+    fn parse_comma_separated_expression_list(
+        &mut self,
+        closing_token: Token,
+    ) -> ParsingResult<Vec<Expression>> {
+        let mut items = Vec::new();
+
+        match &self.get_token_or_error(&self.current_token)?.token {
+            token if *token == closing_token => {
+                self.next_token();
+                return Ok(items);
+            }
+            _ => items.push(self.parse_expression(Precedence::Lowest)?),
+        }
+
+        loop {
+            let current_token_is_comma_between_items =
+                Self::is_token(&self.current_token, Token::Comma);
+
+            if !current_token_is_comma_between_items {
+                break;
+            }
+
+            self.next_token();
+
+            items.push(self.parse_expression(Precedence::Lowest)?);
+        }
+
+        self.expect_token_or_error(&self.current_token, closing_token)?;
+
+        self.next_token();
+
+        Ok(items)
     }
 
     fn parse_if_expression(&mut self) -> ParsingResult<Expression> {
@@ -458,6 +476,21 @@ impl<'a> Parser<'a> {
         Ok(BlockStatement::new(statements))
     }
 
+    fn parse_index_expression(&mut self, left_expression: Expression) -> ParsingResult<Expression> {
+        self.next_token();
+
+        let index = self.parse_expression(Precedence::Lowest)?;
+
+        self.expect_token_or_error(&self.current_token, Token::ClosingBracket)?;
+
+        self.next_token();
+
+        Ok(Expression::IndexOperation(IndexOperationExpression::new(
+            index,
+            left_expression,
+        )))
+    }
+
     fn parse_infix_expression(&mut self, left_expression: Expression) -> ParsingResult<Expression> {
         let operator =
             self.get_token_or_error(&self.current_token)
@@ -524,8 +557,9 @@ mod tests {
     use crate::lexer::Lexer;
     use crate::representations::ast::{
         BlockStatement, ConditionalExpression, Expression, ExpressionOperator,
-        FunctionCallExpression, FunctionExpression, Identifier, InfixOperationExpression,
-        LetStatement, PrefixOperationExpression, ReturnStatement, Statement,
+        FunctionCallExpression, FunctionExpression, Identifier, IndexOperationExpression,
+        InfixOperationExpression, LetStatement, PrefixOperationExpression, ReturnStatement,
+        Statement,
     };
     use crate::representations::token::Literal;
 
@@ -987,5 +1021,58 @@ mod tests {
         ))];
 
         assert_eq!(program.statements, expected_statements);
+    }
+
+    #[test]
+    fn array_expression() {
+        let input = "[1, 2 * 9, 3 + 4]";
+
+        let program = parse(input).unwrap();
+
+        let expected_statements = vec![Statement::Expression(Expression::Array(vec![
+            Expression::Integer(1),
+            Expression::InfixOperation(InfixOperationExpression::new(
+                ExpressionOperator::Multiply,
+                Expression::Integer(2),
+                Expression::Integer(9),
+            )),
+            Expression::InfixOperation(InfixOperationExpression::new(
+                ExpressionOperator::Plus,
+                Expression::Integer(3),
+                Expression::Integer(4),
+            )),
+        ]))];
+
+        assert_eq!(program.statements, expected_statements);
+    }
+
+    #[test]
+    fn array_index_expression() {
+        let inputs_to_expected = vec![
+            (
+                "[1, 2][0]",
+                vec![Statement::Expression(Expression::IndexOperation(
+                    IndexOperationExpression::new(
+                        Expression::Integer(0),
+                        Expression::Array(vec![Expression::Integer(1), Expression::Integer(2)]),
+                    ),
+                ))],
+            ),
+            (
+                "a[0]",
+                vec![Statement::Expression(Expression::IndexOperation(
+                    IndexOperationExpression::new(
+                        Expression::Integer(0),
+                        Expression::Identifier(Identifier::new(Literal("a".to_string()))),
+                    ),
+                ))],
+            ),
+        ];
+
+        for (input, expected) in inputs_to_expected {
+            let program = parse(input).unwrap();
+
+            assert_eq!(program.statements, expected);
+        }
     }
 }

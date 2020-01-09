@@ -1,8 +1,9 @@
 use crate::representations::ast::{
     ConditionalExpression, Expression, ExpressionOperator, FunctionCallExpression,
-    FunctionExpression, Identifier, InfixOperationExpression, PrefixOperationExpression, Program,
-    Statement,
+    FunctionExpression, Identifier, IndexOperationExpression, InfixOperationExpression,
+    PrefixOperationExpression, Program, Statement,
 };
+use std::convert::TryInto;
 
 mod builtins;
 pub mod errors;
@@ -23,6 +24,25 @@ fn eval_minus_prefix_operator_expression(value: Object) -> InterpretingResult<Ob
     match value {
         Object::Integer(value) => Ok(Object::Integer(-value)),
         object => Err(ErrorKind::UnknownPrefixOperator(ExpressionOperator::Minus, object).into()),
+    }
+}
+
+fn eval_index_operation(index: Object, left_value: Object) -> InterpretingResult<Object> {
+    match (index, left_value) {
+        (Object::Integer(numeric_index), Object::Array(array)) => {
+            if numeric_index < 0 {
+                return Err(ErrorKind::OutOfBoundsArrayIndex(array, numeric_index).into());
+            }
+
+            let u_numeric_index: usize = numeric_index.try_into().unwrap();
+
+            if u_numeric_index >= array.len() {
+                Err(ErrorKind::OutOfBoundsArrayIndex(array, numeric_index).into())
+            } else {
+                Ok(array[u_numeric_index].clone())
+            }
+        }
+        (index, left_value) => Err(ErrorKind::UnknownIndexOperator(index, left_value).into()),
     }
 }
 
@@ -146,6 +166,21 @@ fn eval_expression(expression: &Expression, env: &mut Environment) -> Interpreti
         Expression::Boolean(value) => Ok(Object::Boolean(*value)),
         Expression::Integer(value) => Ok(Object::Integer(*value)),
         Expression::Str(string) => Ok(Object::Str(string.clone())),
+        Expression::Array(items) => Ok(Object::Array(
+            items
+                .iter()
+                .map(|item| eval_expression(item, env))
+                .collect::<InterpretingResult<Vec<Object>>>()?,
+        )),
+        Expression::IndexOperation(IndexOperationExpression {
+            index,
+            left_expression,
+        }) => {
+            let left_value = eval_expression(left_expression, env)?;
+            let index_value = eval_expression(index, env)?;
+
+            eval_index_operation(index_value, left_value)
+        }
         Expression::PrefixOperation(PrefixOperationExpression {
             prefix_operator,
             right_expression,
@@ -576,6 +611,20 @@ mod tests {
                     "hahasiapakamu".to_string(),
                 ))),
             ),
+            (
+                "[1, 2, 3][3]",
+                ErrorKind::OutOfBoundsArrayIndex(
+                    vec![Object::Integer(1), Object::Integer(2), Object::Integer(3)],
+                    3,
+                ),
+            ),
+            (
+                "[1, 2, 3][-1]",
+                ErrorKind::OutOfBoundsArrayIndex(
+                    vec![Object::Integer(1), Object::Integer(2), Object::Integer(3)],
+                    -1,
+                ),
+            ),
         ];
 
         for (input, expected_error) in inputs_to_expected_errors {
@@ -705,6 +754,115 @@ mod tests {
         let inputs_to_expected_objects = vec![
             ("panjang(\"salam!\")", Object::Integer(6)),
             ("panjang(\"你好！\")", Object::Integer(3)),
+            ("pertama([])", Object::Null),
+            ("pertama([1])", Object::Integer(1)),
+            ("pertama([1, 2])", Object::Integer(1)),
+            ("terakhir([])", Object::Null),
+            ("terakhir([1])", Object::Integer(1)),
+            ("terakhir([1, 2])", Object::Integer(2)),
+            ("sisa([])", Object::Null),
+            ("sisa([1])", Object::Array(Vec::new())),
+            ("sisa([1, 2])", Object::Array(vec![Object::Integer(2)])),
+            (
+                "sisa([1, 2, 3])",
+                Object::Array(vec![Object::Integer(2), Object::Integer(3)]),
+            ),
+            ("tambah([], 42)", Object::Array(vec![Object::Integer(42)])),
+            (
+                "tambah([42], 84)",
+                Object::Array(vec![Object::Integer(42), Object::Integer(84)]),
+            ),
+            (
+                "tambah([42, 84], 168)",
+                Object::Array(vec![
+                    Object::Integer(42),
+                    Object::Integer(84),
+                    Object::Integer(168),
+                ]),
+            ),
+            (
+                // original example from the book Writing An Interpreter In Go
+                "
+                    diketahui map = fungsi(arr, f) {
+                        diketahui iter = fungsi(arr, accumulated) {
+                            jika (panjang(arr) == 0) {
+                                accumulated
+                            } jika tidak {
+                                iter(sisa(arr), tambah(accumulated, f(pertama(arr))));
+                            }
+                        };
+                    
+                        iter(arr, []);
+                    };
+                    
+                    diketahui a = [1, 2, 3, 4];
+                    diketahui double = fungsi(x) { x * 2 };
+
+                    map(a, double);
+                ",
+                Object::Array(vec![
+                    Object::Integer(2),
+                    Object::Integer(4),
+                    Object::Integer(6),
+                    Object::Integer(8),
+                ]),
+            ),
+            (
+                "
+                    diketahui reduce = fungsi(arr, initial, f) {
+                        diketahui iter = fungsi(arr, result) {
+                            jika (panjang(arr) == 0) {
+                                result
+                            } jika tidak {
+                                iter(sisa(arr), f(result, pertama(arr)));
+                            }
+                        };
+
+                        iter(arr, initial);
+                    };
+
+                    diketahui sum = fungsi(arr) {
+                        reduce(arr, 0, fungsi(initial, el) { initial + el });
+                    };
+
+                    sum([1, 2, 3, 4, 5]);
+                ",
+                Object::Integer(15),
+            ),
+        ];
+
+        for (input, expected_object) in inputs_to_expected_objects {
+            let object = parse_eval(input).unwrap();
+
+            assert_eq!(object, expected_object);
+        }
+    }
+
+    #[test]
+    fn eval_array_expressions() {
+        let inputs_to_expected_objects = vec![
+            (
+                "[1, 2]",
+                Object::Array(vec![Object::Integer(1), Object::Integer(2)]),
+            ),
+            ("panjang([42, benar, \"hi\"])", Object::Integer(3)),
+            ("[1, 2, 3][0]", Object::Integer(1)),
+            ("[1, 2, 3][1]", Object::Integer(2)),
+            ("[1, 2, 3][2]", Object::Integer(3)),
+            ("diketahui i = 0; [1][i];", Object::Integer(1)),
+            ("[1, 2, 3][1 + 1];", Object::Integer(3)),
+            (
+                "diketahui myArray = [1, 2, 3]; myArray[2];",
+                Object::Integer(3),
+            ),
+            (
+                "diketahui myArray = [1, 2, 3]; myArray[0] + myArray[1] + myArray[2];",
+                Object::Integer(6),
+            ),
+            (
+                "diketahui myArray = [1, 2, 3]; diketahui i = myArray[0]; myArray[i]",
+                Object::Integer(2),
+            ),
         ];
 
         for (input, expected_object) in inputs_to_expected_objects {

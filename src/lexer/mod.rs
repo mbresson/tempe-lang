@@ -228,6 +228,16 @@ impl<'a> Lexer<'a> {
 
                 Token::ClosingParenthesis
             }
+            '[' => {
+                self.current_char = self.advance_to_next_char();
+
+                Token::OpeningBracket
+            }
+            ']' => {
+                self.current_char = self.advance_to_next_char();
+
+                Token::ClosingBracket
+            }
             '{' => {
                 self.current_char = self.advance_to_next_char();
 
@@ -413,6 +423,8 @@ mod tests {
             10 != 9;
 
             \"哈囉！สวัสดีครับ \\\"Salam!\\\" привет!\"
+
+            [1, [benar, \"ini rumit\"]];
         ";
 
         let expected_tokens = vec![
@@ -530,6 +542,18 @@ mod tests {
             //
             // "哈囉！สวัสดีครับ \"Salam!\"" привет!"
             Token::Str("哈囉！สวัสดีครับ \"Salam!\" привет!".to_string()),
+            //
+            // [1, [benar, \"ini rumit\"]];
+            Token::OpeningBracket,
+            Token::Integer(1),
+            Token::Comma,
+            Token::OpeningBracket,
+            Token::True,
+            Token::Comma,
+            Token::Str("ini rumit".to_string()),
+            Token::ClosingBracket,
+            Token::ClosingBracket,
+            Token::Semicolon,
         ];
 
         let lexer = super::Lexer::new(input);
