@@ -41,6 +41,7 @@ pub enum Token {
     // ----- other symbols -----
     Comma,
     Semicolon,
+    Colon,
 
     OpeningParenthesis,
     ClosingParenthesis,

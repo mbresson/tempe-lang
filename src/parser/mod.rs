@@ -1,7 +1,8 @@
 use crate::representations::ast::{
     BlockStatement, ConditionalExpression, Expression, ExpressionOperator, FunctionCallExpression,
-    FunctionExpression, Identifier, IndexOperationExpression, InfixOperationExpression,
-    LetStatement, Precedence, PrefixOperationExpression, Program, ReturnStatement, Statement,
+    FunctionExpression, HashMapKeyValue, Identifier, IndexOperationExpression,
+    InfixOperationExpression, LetStatement, Precedence, PrefixOperationExpression, Program,
+    ReturnStatement, Statement,
 };
 use crate::representations::token::{Context, Token, TokenWithContext};
 use std::vec::Vec;
@@ -87,6 +88,7 @@ impl<'a> Parser<'a> {
 
                 Ok(string)
             }
+            Token::OpeningBrace => self.parse_hashmap_expression(),
             Token::OpeningBracket => self.parse_array_expression(),
             Token::Minus | Token::Bang => self.parse_prefix_expression(),
             Token::OpeningParenthesis => self.parse_grouped_expression(),
@@ -195,7 +197,7 @@ impl<'a> Parser<'a> {
 
         self.next_token();
 
-        if self.current_token.is_none() || Self::is_token(&self.current_token, Token::Semicolon) {
+        if self.current_token.is_none() || Self::is_token(&self.current_token, &Token::Semicolon) {
             return Err(ErrorKind::ExpectedExpression(
                 previous_token.context,
                 self.current_token.clone(),
@@ -310,6 +312,49 @@ impl<'a> Parser<'a> {
         )))
     }
 
+    fn parse_hashmap_key_value_pair(&mut self) -> ParsingResult<HashMapKeyValue> {
+        let key_expression = self.parse_expression(Precedence::Lowest)?;
+
+        self.expect_token_or_error(&self.current_token, Token::Colon)?;
+
+        self.next_token();
+
+        let value_expression = self.parse_expression(Precedence::Lowest)?;
+
+        Ok((key_expression, value_expression))
+    }
+
+    fn parse_hashmap_expression(&mut self) -> ParsingResult<Expression> {
+        self.next_token();
+
+        let mut key_value_pairs = Vec::new();
+
+        loop {
+            if Self::is_token(&self.current_token, &Token::ClosingBrace) {
+                break;
+            }
+
+            let key_value = self.parse_hashmap_key_value_pair()?;
+
+            key_value_pairs.push(key_value);
+
+            let current_token_is_comma_between_items =
+                Self::is_token(&self.current_token, &Token::Comma);
+
+            if !current_token_is_comma_between_items {
+                self.expect_token_or_error(&self.current_token, Token::ClosingBrace)?;
+
+                break;
+            }
+
+            self.next_token();
+        }
+
+        self.next_token();
+
+        Ok(Expression::HashLiteral(key_value_pairs))
+    }
+
     fn parse_array_expression(&mut self) -> ParsingResult<Expression> {
         self.next_token();
 
@@ -325,31 +370,10 @@ impl<'a> Parser<'a> {
     fn parse_function_expression_parameters(&mut self) -> ParsingResult<Vec<Identifier>> {
         let mut identifiers = Vec::new();
 
-        match self.get_token_or_error(&self.current_token)? {
-            TokenWithContext {
-                token: Token::ClosingParenthesis,
-                ..
-            } => return Ok(identifiers),
-            TokenWithContext {
-                token: Token::Identifier(literal),
-                ..
-            } => identifiers.push(Identifier::new(literal.clone())),
-            illegal_token => {
-                return Err(ErrorKind::ExpectedIdentifier(illegal_token.clone()).into())
-            }
-        }
-
-        self.next_token();
-
         loop {
-            let current_token_is_comma_between_arguments =
-                Self::is_token(&self.current_token, Token::Comma);
-
-            if !current_token_is_comma_between_arguments {
+            if Self::is_token(&self.current_token, &Token::ClosingParenthesis) {
                 break;
             }
-
-            self.next_token();
 
             match self.get_token_or_error(&self.current_token)? {
                 TokenWithContext {
@@ -362,9 +386,18 @@ impl<'a> Parser<'a> {
             }
 
             self.next_token();
-        }
 
-        self.expect_token_or_error(&self.current_token, Token::ClosingParenthesis)?;
+            let current_token_is_comma_between_items =
+                Self::is_token(&self.current_token, &Token::Comma);
+
+            if !current_token_is_comma_between_items {
+                self.expect_token_or_error(&self.current_token, Token::ClosingParenthesis)?;
+
+                break;
+            }
+
+            self.next_token();
+        }
 
         Ok(identifiers)
     }
@@ -375,28 +408,24 @@ impl<'a> Parser<'a> {
     ) -> ParsingResult<Vec<Expression>> {
         let mut items = Vec::new();
 
-        match &self.get_token_or_error(&self.current_token)?.token {
-            token if *token == closing_token => {
-                self.next_token();
-                return Ok(items);
-            }
-            _ => items.push(self.parse_expression(Precedence::Lowest)?),
-        }
-
         loop {
+            if Self::is_token(&self.current_token, &closing_token) {
+                break;
+            }
+
+            items.push(self.parse_expression(Precedence::Lowest)?);
+
             let current_token_is_comma_between_items =
-                Self::is_token(&self.current_token, Token::Comma);
+                Self::is_token(&self.current_token, &Token::Comma);
 
             if !current_token_is_comma_between_items {
+                self.expect_token_or_error(&self.current_token, closing_token)?;
+
                 break;
             }
 
             self.next_token();
-
-            items.push(self.parse_expression(Precedence::Lowest)?);
         }
-
-        self.expect_token_or_error(&self.current_token, closing_token)?;
 
         self.next_token();
 
@@ -426,8 +455,8 @@ impl<'a> Parser<'a> {
 
         // in Indonesian, "else" is translated by a group of 2 words: "jika tidak" (literally "if not")
         // so we must check the current token (if) + the following token (not) to detect "else"
-        let is_else_expression = Self::is_token(&self.current_token, Token::If)
-            && Self::is_token(&self.peek_token, Token::Not);
+        let is_else_expression = Self::is_token(&self.current_token, &Token::If)
+            && Self::is_token(&self.peek_token, &Token::Not);
 
         let alternative = if is_else_expression {
             // skip the "if not" a.k.a. "else" tokens
@@ -466,7 +495,7 @@ impl<'a> Parser<'a> {
 
             let statement = self.parse_statement()?;
 
-            if Self::is_token(&self.current_token, Token::Semicolon) {
+            if Self::is_token(&self.current_token, &Token::Semicolon) {
                 self.next_token();
             }
 
@@ -526,11 +555,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn is_token(tentative_token: &Option<TokenWithContext>, expected_token: Token) -> bool {
+    fn is_token(tentative_token: &Option<TokenWithContext>, expected_token: &Token) -> bool {
         tentative_token
             .as_ref()
             .map_or(false, |token_with_context| {
-                token_with_context.token == expected_token
+                token_with_context.token == *expected_token
             })
     }
 
@@ -1066,6 +1095,59 @@ mod tests {
                         Expression::Identifier(Identifier::new(Literal("a".to_string()))),
                     ),
                 ))],
+            ),
+        ];
+
+        for (input, expected) in inputs_to_expected {
+            let program = parse(input).unwrap();
+
+            assert_eq!(program.statements, expected);
+        }
+    }
+
+    #[test]
+    fn hash_literals() {
+        let inputs_to_expected = vec![
+            (
+                "{\"one\": 1, \"two\": 2, \"three\": 3}",
+                vec![Statement::Expression(Expression::HashLiteral(vec![
+                    (Expression::Str("one".to_string()), Expression::Integer(1)),
+                    (Expression::Str("two".to_string()), Expression::Integer(2)),
+                    (Expression::Str("three".to_string()), Expression::Integer(3)),
+                ]))],
+            ),
+            (
+                "{}",
+                vec![Statement::Expression(Expression::HashLiteral(Vec::new()))],
+            ),
+            (
+                "{\"one\": 0 + 1, \"two\": 10 - 8, \"three\": 15 / 5}",
+                vec![Statement::Expression(Expression::HashLiteral(vec![
+                    (
+                        Expression::Str("one".to_string()),
+                        Expression::InfixOperation(InfixOperationExpression::new(
+                            ExpressionOperator::Plus,
+                            Expression::Integer(0),
+                            Expression::Integer(1),
+                        )),
+                    ),
+                    (
+                        Expression::Str("two".to_string()),
+                        Expression::InfixOperation(InfixOperationExpression::new(
+                            ExpressionOperator::Minus,
+                            Expression::Integer(10),
+                            Expression::Integer(8),
+                        )),
+                    ),
+                    (
+                        Expression::Str("three".to_string()),
+                        Expression::InfixOperation(InfixOperationExpression::new(
+                            ExpressionOperator::Divide,
+                            Expression::Integer(15),
+                            Expression::Integer(5),
+                        )),
+                    ),
+                ]))],
             ),
         ];
 

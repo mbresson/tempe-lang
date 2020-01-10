@@ -55,6 +55,8 @@ impl fmt::Display for Identifier {
     }
 }
 
+pub type HashMapKeyValue = (Expression, Expression);
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
     Identifier(Identifier),
@@ -62,6 +64,7 @@ pub enum Expression {
     Str(String),
     Boolean(bool),
     Array(Vec<Expression>),
+    HashLiteral(Vec<HashMapKeyValue>),
     IndexOperation(IndexOperationExpression),
     PrefixOperation(PrefixOperationExpression),
     InfixOperation(InfixOperationExpression),
@@ -76,6 +79,20 @@ impl fmt::Display for Expression {
             Self::Boolean(true) => write!(f, "{}", keywords::TRUE),
             Self::Boolean(false) => write!(f, "{}", keywords::FALSE),
             Self::Array(array) => write!(f, "[{}]", array.iter().format(", ")),
+            Self::HashLiteral(key_value_pairs) => {
+                if key_value_pairs.is_empty() {
+                    write!(f, "{{}}")
+                } else {
+                    write!(
+                        f,
+                        "{{\n{}\n}}",
+                        key_value_pairs
+                            .iter()
+                            .map(|(key, value)| format!("\t{} => {}", key, value))
+                            .format(",\n")
+                    )
+                }
+            }
             Self::Integer(val) => write!(f, "{}", val),
             Self::Str(string) => write!(f, "\"{}\"", string),
             Self::IndexOperation(expression) => write!(f, "{}", expression),

@@ -3,6 +3,7 @@ use crate::representations::ast::{
     FunctionExpression, Identifier, IndexOperationExpression, InfixOperationExpression,
     PrefixOperationExpression, Program, Statement,
 };
+use std::collections::HashMap;
 use std::convert::TryInto;
 
 mod builtins;
@@ -41,6 +42,9 @@ fn eval_index_operation(index: Object, left_value: Object) -> InterpretingResult
             } else {
                 Ok(array[u_numeric_index].clone())
             }
+        }
+        (Object::Str(key), Object::HashMap(hashmap)) => {
+            Ok(hashmap.get(&key).map(Object::clone).unwrap_or(Object::Null))
         }
         (index, left_value) => Err(ErrorKind::UnknownIndexOperator(index, left_value).into()),
     }
@@ -172,6 +176,22 @@ fn eval_expression(expression: &Expression, env: &mut Environment) -> Interpreti
                 .map(|item| eval_expression(item, env))
                 .collect::<InterpretingResult<Vec<Object>>>()?,
         )),
+        Expression::HashLiteral(key_value_pairs) => {
+            let mut hashmap = HashMap::new();
+
+            for (key_expression, value_expression) in key_value_pairs {
+                let key = eval_expression(key_expression, env)?;
+                let value = eval_expression(value_expression, env)?;
+
+                if let Object::Str(key_string) = key {
+                    hashmap.insert(key_string, value);
+                } else {
+                    return Err(ErrorKind::WrongHashMapKeyType(key).into());
+                }
+            }
+
+            Ok(Object::HashMap(hashmap))
+        }
         Expression::IndexOperation(IndexOperationExpression {
             index,
             left_expression,
@@ -863,6 +883,55 @@ mod tests {
                 "diketahui myArray = [1, 2, 3]; diketahui i = myArray[0]; myArray[i]",
                 Object::Integer(2),
             ),
+        ];
+
+        for (input, expected_object) in inputs_to_expected_objects {
+            let object = parse_eval(input).unwrap();
+
+            assert_eq!(object, expected_object);
+        }
+    }
+
+    #[test]
+    fn eval_hashmap_literal() {
+        let input = "
+            diketahui two = \"two\";
+
+            {
+                \"one\": 10 - 9,
+                two: 1 + 1,
+                \"thr\" + \"ee\": 6 / 2,
+                \"4\": 4,
+            }
+        ";
+
+        let expected_object = Object::HashMap(
+            vec![
+                ("one".to_string(), Object::Integer(1)),
+                ("two".to_string(), Object::Integer(2)),
+                ("three".to_string(), Object::Integer(3)),
+                ("4".to_string(), Object::Integer(4)),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        );
+
+        let object = parse_eval(input).unwrap();
+
+        assert_eq!(object, expected_object);
+    }
+
+    #[test]
+    fn eval_hashmap_index_expressions() {
+        let inputs_to_expected_objects = vec![
+            ("{\"foo\": 5}[\"foo\"]", Object::Integer(5)),
+            ("{\"foo\": 5}[\"bar\"]", Object::Null),
+            (
+                "diketahui key = \"foo\"; {\"foo\": 5}[key]",
+                Object::Integer(5),
+            ),
+            ("{}[\"foo\"]", Object::Null),
         ];
 
         for (input, expected_object) in inputs_to_expected_objects {

@@ -258,6 +258,11 @@ impl<'a> Lexer<'a> {
 
                 Token::Semicolon
             }
+            ':' => {
+                self.current_char = self.advance_to_next_char();
+
+                Token::Colon
+            }
             '+' => {
                 self.current_char = self.advance_to_next_char();
 
@@ -425,6 +430,7 @@ mod tests {
             \"哈囉！สวัสดีครับ \\\"Salam!\\\" привет!\"
 
             [1, [benar, \"ini rumit\"]];
+            {\"foo\": \"bar\"}
         ";
 
         let expected_tokens = vec![
@@ -554,6 +560,13 @@ mod tests {
             Token::ClosingBracket,
             Token::ClosingBracket,
             Token::Semicolon,
+            //
+            // {\"foo\": \"bar\"}
+            Token::OpeningBrace,
+            Token::Str("foo".to_string()),
+            Token::Colon,
+            Token::Str("bar".to_string()),
+            Token::ClosingBrace,
         ];
 
         let lexer = super::Lexer::new(input);

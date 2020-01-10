@@ -60,5 +60,10 @@ error_chain! {
                 function_name_or_anonymous(function), expected_types.iter().format(" | "), argument
             )
         }
+
+        WrongHashMapKeyType(key: Object) {
+            description("wrong hashmap key type")
+            display("wrong hashmap key type, expected string, got {:?}", key)
+        }
     }
 }

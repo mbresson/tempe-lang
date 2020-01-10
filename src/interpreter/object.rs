@@ -14,6 +14,7 @@ pub enum Object {
     Boolean(bool),
     Str(String),
     Array(Vec<Object>),
+    HashMap(HashMap<String, Object>),
     Function(Box<FunctionObject>), // Box<...> is required to support function recursion, c.f. interpreter code
     BuiltinFunction(BuiltinFunctionObject),
     EarlyReturnedObject(Box<Object>),
@@ -27,6 +28,20 @@ impl fmt::Display for Object {
             Self::Boolean(value) => write!(f, "{}", value),
             Self::Str(string) => write!(f, "\"{}\"", string.replace("\"", "\\\"")),
             Self::Array(array) => write!(f, "[{}]", array.iter().format(", ")),
+            Self::HashMap(hashmap) => {
+                if hashmap.is_empty() {
+                    write!(f, "{{}}")
+                } else {
+                    write!(
+                        f,
+                        "{{\n{}\n}}",
+                        hashmap
+                            .iter()
+                            .map(|(key, value)| format!("\t\"{}\" => {}", key, value))
+                            .format(",\n")
+                    )
+                }
+            }
             Self::Function(function) => write!(
                 f,
                 "{}({}) {{ ... }}",
