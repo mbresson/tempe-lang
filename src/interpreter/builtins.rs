@@ -14,6 +14,7 @@ const NAME_FN_FIRST: &str = "pertama";
 const NAME_FN_LAST: &str = "terakhir";
 const NAME_FN_REST: &str = "sisa";
 const NAME_FN_PUSH: &str = "tambah";
+const NAME_FN_PUTS: &str = "tampilkan";
 
 fn assert_has_n_arguments(arguments: &[Object], n: usize, fn_name: &str) -> InterpretingResult<()> {
     if arguments.len() != n {
@@ -139,6 +140,20 @@ fn new_push() -> Box<BuiltinFn> {
     })
 }
 
+fn new_puts() -> Box<BuiltinFn> {
+    Box::new(|arguments| {
+        for argument in arguments {
+            if let Object::Str(string) = argument {
+                println!("{}", string);
+            } else {
+                println!("{}", argument);
+            }
+        }
+
+        Ok(Object::Null)
+    })
+}
+
 pub fn builtins_map() -> HashMap<Identifier, (Vec<Identifier>, Box<BuiltinFn>)> {
     let mut builtins = HashMap::new();
 
@@ -167,6 +182,14 @@ pub fn builtins_map() -> HashMap<Identifier, (Vec<Identifier>, Box<BuiltinFn>)> 
         (
             vec![Identifier::new(Literal("a, b".to_string()))],
             new_push(),
+        ),
+    );
+
+    builtins.insert(
+        Identifier::new(Literal(NAME_FN_PUTS.to_string())),
+        (
+            vec![Identifier::new(Literal("a, b, c...".to_string()))],
+            new_puts(),
         ),
     );
 
