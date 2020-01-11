@@ -4,6 +4,14 @@ version = "0.1.0"
 authors = ["Matthieu Bresson <matthieu.bresson@outlook.com>"]
 edition = "2018"
 
+[lib]
+name = "tempe_lang"
+path = "lib/lib.rs"
+
+[[bin]]
+name = "tempe_lang_repl"
+path = "src/main.rs"
+
 [dependencies]
 users = "0.9"
 itertools = "0.8"

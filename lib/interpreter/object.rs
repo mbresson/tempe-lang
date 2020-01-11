@@ -95,7 +95,7 @@ pub struct Environment {
 }
 
 impl Environment {
-    fn with_builtin_functions() -> Self {
+    pub fn new_with_builtin_functions() -> Self {
         Self {
             variables: builtins_map()
                 .into_iter()
@@ -110,10 +110,6 @@ impl Environment {
                 })
                 .collect(),
         }
-    }
-
-    pub fn new() -> Self {
-        Self::with_builtin_functions()
     }
 
     pub fn get(&self, key: &Identifier) -> Option<&Object> {

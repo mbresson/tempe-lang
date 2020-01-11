@@ -1,8 +1,4 @@
-mod interpreter;
-mod lexer;
-mod parser;
 mod repl;
-mod representations;
 
 use std::io::{stdin, stdout};
 

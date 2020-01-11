@@ -1,9 +1,11 @@
+extern crate tempe_lang;
+
 use std::io::{BufRead, Write};
 use std::process;
 
-use crate::interpreter::{eval_program, object::Environment};
-use crate::lexer::Lexer;
-use crate::parser::{
+use tempe_lang::interpreter::{eval_program, object::Environment};
+use tempe_lang::lexer::Lexer;
+use tempe_lang::parser::{
     errors::{Error as ParserError, ErrorKind as ParserErrorKind},
     Parser,
 };
@@ -13,7 +15,7 @@ const PROMPT: &[u8] = b">> ";
 pub fn start<R: BufRead, W: Write>(reader: &mut R, writer: &mut W) {
     let mut lines = reader.lines();
 
-    let mut shared_environment = Environment::new();
+    let mut shared_environment = Environment::new_with_builtin_functions();
 
     'repl: loop {
         writer.write_all(PROMPT).unwrap();

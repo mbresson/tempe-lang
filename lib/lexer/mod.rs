@@ -13,6 +13,8 @@ impl<'a> Lexer<'a> {
     /// # Examples
     ///
     /// ```
+    /// use tempe_lang::lexer::Lexer;
+    ///
     /// let source_code = "
     /// 1 + 1
     /// ";
